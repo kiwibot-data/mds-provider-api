@@ -87,6 +87,30 @@ docker-compose up -d
 curl http://localhost:8000/health
 ```
 
+### Google Cloud Run Deployment
+
+The project includes a `cloudbuild.yaml` configuration for automated deployment to Google Cloud Run:
+
+1. **Deploy using Cloud Build:**
+```bash
+gcloud builds submit --config cloudbuild.yaml
+```
+
+2. **Manual deployment steps:**
+   - Builds Docker image tagged with your project ID
+   - Pushes image to Google Container Registry
+   - Deploys to Cloud Run in `us-central1` region
+   - Configures service to run on port 8000 with public access
+
+3. **Service configuration:**
+   - **Platform**: Google Cloud Run (managed)
+   - **Region**: us-central1
+   - **Port**: 8000
+   - **Access**: Public (unauthenticated)
+   - **Auto-scaling**: Enabled
+
+The deployment automatically handles containerization, registry management, and service provisioning.
+
 ## API Endpoints
 
 ### Authentication
