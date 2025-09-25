@@ -22,6 +22,7 @@ steps:
       - '--set-env-vars=BIGQUERY_PROJECT_ID=${_BIGQUERY_PROJECT_ID}'
       - '--set-env-vars=CORS_ORIGINS=*'
       - '--set-env-vars=LOG_LEVEL=INFO'
+      - '--set-env-vars=API_KEY_WASHINGTON_DDOT=${_API_KEY_WASHINGTON_DDOT}'
       - '--memory=1Gi'
       - '--cpu=1'
       - '--max-instances=10'
@@ -36,3 +37,4 @@ substitutions:
   _MDS_PROVIDER_ID: 'kiwibot-delivery-robots'
   _API_BASE_URL: 'https://mds.kiwibot.com'
   _BIGQUERY_PROJECT_ID: 'kiwibot-atlas'
+  _API_KEY_WASHINGTON_DDOT: 'mds_washington_ddot_2024:washingtonddot:read_vehicles_read_trips_read_events'

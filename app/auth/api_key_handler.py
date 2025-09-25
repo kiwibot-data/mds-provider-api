@@ -24,19 +24,31 @@ class APIKeyHandler:
         # In production, load from secure database
         api_keys = {}
         
-        # Load from environment variables (format: API_KEY_1=key1:provider1, API_KEY_2=key2:provider2)
+        # Load from environment variables (format: API_KEY_PROVIDER=key:provider:permissions)
         import os
-        for i in range(1, 11):  # Support up to 10 API keys
-            key_env = f"API_KEY_{i}"
-            if key_env in os.environ:
-                key_data = os.environ[key_env]
-                if ":" in key_data:
-                    key, provider = key_data.split(":", 1)
+        for env_var, value in os.environ.items():
+            if env_var.startswith("API_KEY_") and ":" in value:
+                try:
+                    key, provider, permissions_str = value.split(":", 2)
+                    # Handle both comma-separated and underscore-separated permissions
+                    if "," in permissions_str:
+                        permissions = permissions_str.split(",")
+                    else:
+                        permissions = permissions_str.split("_")
                     api_keys[key] = {
                         "provider_id": provider,
-                        "permissions": ["read"],  # Default permissions
+                        "permissions": permissions,
                         "active": True
                     }
+                except ValueError:
+                    # Fallback to simple format
+                    if ":" in value:
+                        key, provider = value.split(":", 1)
+                        api_keys[key] = {
+                            "provider_id": provider,
+                            "permissions": ["read"],
+                            "active": True
+                        }
         
         return api_keys
 
