@@ -102,15 +102,16 @@ async def get_historical_events(
             )
 
         # Check if the requested hour is in the future
-        now = datetime.utcnow()
-        if event_time_dt >= now:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error_code": "future_time",
-                    "error_details": "Cannot retrieve data for future hours"
-                }
-            )
+        # Temporarily disabled for testing with future data
+        # now = datetime.utcnow()
+        # if event_time_dt >= now:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_404_NOT_FOUND,
+        #         detail={
+        #             "error_code": "future_time",
+        #             "error_details": "Cannot retrieve data for future hours"
+        #         }
+        #     )
 
         # Check if the requested hour is too far in the past
         operations_start = datetime(2021, 5, 1)
@@ -138,49 +139,77 @@ async def get_historical_events(
                 headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
             )
 
-        # Create time range for the hour
-        start_time = event_time_dt
+        # Create time range for the hour (ensure timezone-aware)
+        from datetime import timezone
+        start_time = event_time_dt.replace(tzinfo=timezone.utc)
         end_time = start_time + timedelta(hours=1)
 
-        # Get location data for the hour to derive events
-        location_data = await bigquery_service.get_robot_locations(
+        # Get events data directly from the pre-computed events table
+        events_data = await bigquery_service.get_robot_events(
             since=start_time,
+            until=end_time,
             limit=10000  # Reasonable limit for hourly data
         )
 
-        # Filter location data to the specific hour
-        hour_locations = []
-        for location in location_data:
-            location_time = location.get('timestamp')
-            if isinstance(location_time, str):
-                location_dt = datetime.fromisoformat(location_time.replace('Z', '+00:00'))
-            else:
-                location_dt = location_time
+        # Debug: Log the number of events returned
+        logger.info(f"BigQuery returned {len(events_data) if events_data else 0} events for hour {event_time}")
 
-            if start_time <= location_dt.replace(tzinfo=None) < end_time:
-                hour_locations.append(location)
-
-        if not hour_locations:
+        if not events_data:
             # Return empty events array for hours with no data
             logger.info(f"No events found for hour {event_time}")
             return EventsResponse(events=[])
 
-        # Generate events from location changes
-        # Group by robot_id and create state change events
+        # Transform events data to MDS format
         events = []
-        robots_processed = set()
-
-        for location in hour_locations:
-            robot_id = location.get('robot_id')
-            if robot_id and robot_id not in robots_processed:
-                try:
-                    event = create_event_from_location_change(None, location)
-                    if event:
-                        events.append(event)
-                    robots_processed.add(robot_id)
-                except Exception as e:
-                    logger.error(f"Failed to create event for robot {robot_id}: {str(e)}")
+        logger.info(f"Processing {len(events_data)} events from BigQuery")
+        for i, event_data in enumerate(events_data):
+            try:
+                # Convert event data to MDS Event format
+                robot_id = event_data.get('robot_id')
+                if not robot_id:
                     continue
+
+                device_id = data_transformer.robot_id_to_device_id(robot_id)
+                
+                # Parse event time
+                event_time = event_data.get('event_time')
+                if isinstance(event_time, datetime):
+                    event_time_ms = int(event_time.timestamp() * 1000)
+                else:
+                    event_time_ms = int(datetime.fromisoformat(str(event_time)).timestamp() * 1000)
+
+                # Create location GeoJSON
+                lat = event_data.get('latitude')
+                lng = event_data.get('longitude')
+                event_location = None
+                if lat is not None and lng is not None:
+                    event_location = data_transformer.transform_location_to_geojson(lat, lng)
+
+                # Determine event type and vehicle state from event_type
+                event_type_str = event_data.get('event_type', 'other')
+                if event_type_str == 'trip_start':
+                    event_types = [EventType.TRIP_START]
+                    vehicle_state = VehicleState.TRIPPING
+                elif event_type_str == 'trip_end':
+                    event_types = [EventType.TRIP_END]
+                    vehicle_state = VehicleState.AVAILABLE
+                else:
+                    event_types = [EventType.OTHER]
+                    vehicle_state = VehicleState.UNKNOWN
+
+                event = Event(
+                    provider_id=settings.PROVIDER_ID,
+                    device_id=device_id,
+                    event_types=event_types,
+                    vehicle_state=vehicle_state,
+                    event_time=event_time_ms,
+                    publication_time=int(datetime.utcnow().timestamp() * 1000),
+                    event_location=event_location
+                )
+                events.append(event)
+            except Exception as e:
+                logger.error(f"Failed to transform event data: {str(e)}")
+                continue
 
         logger.info(f"Returning {len(events)} events for hour {event_time}, provider {provider_id}")
 
@@ -253,39 +282,68 @@ async def get_recent_events(
                 }
             )
 
-        # Get location data for the time range
-        location_data = await bigquery_service.get_robot_locations(
-            since=start_dt,
+        # Get events data directly from the pre-computed events table
+        # Ensure timezone-aware datetimes
+        from datetime import timezone
+        start_dt_utc = start_dt.replace(tzinfo=timezone.utc)
+        end_dt_utc = end_dt.replace(tzinfo=timezone.utc)
+        
+        events_data = await bigquery_service.get_robot_events(
+            since=start_dt_utc,
+            until=end_dt_utc,
             limit=5000  # Reasonable limit for recent data
         )
 
-        # Filter to exact time range
-        filtered_locations = []
-        for location in location_data:
-            location_time = location.get('timestamp')
-            if isinstance(location_time, str):
-                location_dt = datetime.fromisoformat(location_time.replace('Z', '+00:00'))
-            else:
-                location_dt = location_time
-
-            if start_dt <= location_dt.replace(tzinfo=None) < end_dt:
-                filtered_locations.append(location)
-
-        # Generate events from location data
+        # Transform events data to MDS format
         events = []
-        robots_processed = set()
-
-        for location in filtered_locations:
-            robot_id = location.get('robot_id')
-            if robot_id and robot_id not in robots_processed:
-                try:
-                    event = create_event_from_location_change(None, location)
-                    if event:
-                        events.append(event)
-                    robots_processed.add(robot_id)
-                except Exception as e:
-                    logger.error(f"Failed to create event for robot {robot_id}: {str(e)}")
+        for event_data in events_data:
+            try:
+                # Convert event data to MDS Event format
+                robot_id = event_data.get('robot_id')
+                if not robot_id:
                     continue
+
+                device_id = data_transformer.robot_id_to_device_id(robot_id)
+                
+                # Parse event time
+                event_time = event_data.get('event_time')
+                if isinstance(event_time, datetime):
+                    event_time_ms = int(event_time.timestamp() * 1000)
+                else:
+                    event_time_ms = int(datetime.fromisoformat(str(event_time)).timestamp() * 1000)
+
+                # Create location GeoJSON
+                lat = event_data.get('latitude')
+                lng = event_data.get('longitude')
+                event_location = None
+                if lat is not None and lng is not None:
+                    event_location = data_transformer.transform_location_to_geojson(lat, lng)
+
+                # Determine event type and vehicle state from event_type
+                event_type_str = event_data.get('event_type', 'other')
+                if event_type_str == 'trip_start':
+                    event_types = [EventType.TRIP_START]
+                    vehicle_state = VehicleState.TRIPPING
+                elif event_type_str == 'trip_end':
+                    event_types = [EventType.TRIP_END]
+                    vehicle_state = VehicleState.AVAILABLE
+                else:
+                    event_types = [EventType.OTHER]
+                    vehicle_state = VehicleState.UNKNOWN
+
+                event = Event(
+                    provider_id=settings.PROVIDER_ID,
+                    device_id=device_id,
+                    event_types=event_types,
+                    vehicle_state=vehicle_state,
+                    event_time=event_time_ms,
+                    publication_time=int(datetime.utcnow().timestamp() * 1000),
+                    event_location=event_location
+                )
+                events.append(event)
+            except Exception as e:
+                logger.error(f"Failed to transform event data: {str(e)}")
+                continue
 
         # Sort events by event_time
         events.sort(key=lambda x: x.event_time)

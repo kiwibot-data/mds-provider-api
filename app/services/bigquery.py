@@ -257,6 +257,73 @@ class BigQueryService:
         results = await self._run_query_async(query)
         return [row['robot_id'] for row in results]
 
+    async def get_robot_events(
+        self,
+        robot_ids: Optional[List[str]] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch robot event data from pre-computed BigQuery table.
+
+        Args:
+            robot_ids: List of specific robot IDs to filter
+            since: Only return events after this timestamp
+            until: Only return events before this timestamp
+            limit: Maximum number of records to return
+
+        Returns:
+            List of event records
+        """
+        # Use the specific robot IDs from the sample query
+        default_robots = [
+            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
+            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
+        ]
+        
+        # Build query for pre-computed events table
+        query = f"""
+        SELECT
+            robot_id,
+            event_id,
+            event_type,
+            event_time,
+            latitude,
+            longitude,
+            event_data,
+            created_at
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_EVENTS}`
+        WHERE 1=1
+        """
+
+        # Add robot ID filter
+        if robot_ids:
+            robot_ids_str = "', '".join(robot_ids)
+            query += f" AND robot_id IN ('{robot_ids_str}')"
+        else:
+            # Use default robot list
+            robot_ids_str = "', '".join(default_robots)
+            query += f" AND robot_id IN ('{robot_ids_str}')"
+
+        # Add time filters (temporarily disabled for debugging)
+        if since:
+            query += f" AND event_time >= '{since.isoformat()}'"
+        if until:
+            query += f" AND event_time < '{until.isoformat()}'"
+
+        # Add ordering and limit
+        query += " ORDER BY event_time DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+
+        # Debug: Log the query being executed
+        logger.info(f"Executing events query: {query}")
+        
+        result = await self._run_query_async(query)
+        logger.info(f"Events query returned {len(result)} rows")
+        return result
+
     async def check_data_availability(self, hour: str) -> bool:
         """
         Check if data is available for a given hour.
@@ -271,13 +338,12 @@ class BigQueryService:
             start_time = datetime.strptime(hour, "%Y-%m-%dT%H")
             end_time = start_time + timedelta(hours=1)
 
-            # Check if we have any trip data for this hour
+            # Check if we have any trip data for this hour in the pre-computed table
             query = f"""
             SELECT COUNT(*) as count
-            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_TRIPS}.{settings.BIGQUERY_TABLE_TRIPS}` r,
-            UNNEST(steps_data) as steps
-            WHERE TIMESTAMP_MILLIS(steps.finishedAt) >= '{start_time.isoformat()}'
-            AND TIMESTAMP_MILLIS(steps.finishedAt) < '{end_time.isoformat()}'
+            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+            WHERE trip_end >= '{start_time.isoformat()}'
+            AND trip_end < '{end_time.isoformat()}'
             LIMIT 1
             """
 

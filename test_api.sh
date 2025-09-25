@@ -19,16 +19,14 @@ echo "2. Testing vehicles endpoint..."
 curl -s -H "X-API-Key: $API_KEY" "$API_URL/vehicles/" | jq '.vehicles | length' || echo "Vehicles endpoint failed"
 echo ""
 
-# Test trips endpoint with a specific hour
+# Test trips endpoint with a specific hour (using data from September 2025)
 echo "3. Testing trips endpoint..."
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/trips?end_time=2025-01-01T12" | jq '.trips | length' || echo "Trips endpoint failed"
+curl -s -H "X-API-Key: $API_KEY" "$API_URL/trips?end_time=2025-09-08T23" | jq '.trips | length' || echo "Trips endpoint failed"
 echo ""
 
-# Test events endpoint (recent events)
+# Test events endpoint (historical events for September 25, 2025)
 echo "4. Testing events endpoint..."
-CURRENT_TIME=$(date +%s)
-START_TIME=$((CURRENT_TIME - 3600))  # 1 hour ago
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/events/recent?start_time=$START_TIME&end_time=$CURRENT_TIME" | jq '.' || echo "Events endpoint failed"
+curl -s -H "X-API-Key: $API_KEY" "$API_URL/events/historical?event_time=2025-09-25T00" | jq '.events | length' || echo "Events endpoint failed"
 echo ""
 
 echo "Test completed!"
