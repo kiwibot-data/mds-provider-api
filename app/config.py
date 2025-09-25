@@ -40,17 +40,8 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 
     # API Configuration
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
+    CORS_ORIGINS: str = "*"
     API_PREFIX: str = "/v1/provider"
-
-    @field_validator('CORS_ORIGINS', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            if v == "*":
-                return ["*"]
-            return v.split(",")
-        return v
 
     # Cache Configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")

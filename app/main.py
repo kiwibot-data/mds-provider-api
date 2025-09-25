@@ -89,9 +89,10 @@ async def add_process_time_header(request: Request, call_next):
 
 
 # CORS middleware
+cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET"],  # MDS Provider API is read-only
     allow_headers=["*"],
