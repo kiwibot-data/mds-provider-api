@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     BIGQUERY_DATASET_TRIPS: str = "remi"
     BIGQUERY_TABLE_LOCATIONS: str = "robot_location"
     BIGQUERY_TABLE_TRIPS: str = "jobs_processed"
+    
+    # Pre-computed tables for fast API access
+    BIGQUERY_DATASET_PRECOMPUTED: str = "mds"
+    BIGQUERY_TABLE_VEHICLES: str = "vehicles_current"
+    BIGQUERY_TABLE_TRIPS_PROCESSED: str = "trips_processed"
+    BIGQUERY_TABLE_EVENTS: str = "events_processed"
 
     # Google Cloud Configuration
     GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "kiwibot-atlas")

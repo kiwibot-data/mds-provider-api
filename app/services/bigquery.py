@@ -56,7 +56,7 @@ class BigQueryService:
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
-        Fetch robot location data from BigQuery.
+        Fetch robot location data from pre-computed BigQuery table.
 
         Args:
             robot_ids: List of specific robot IDs to filter
@@ -72,17 +72,19 @@ class BigQueryService:
             '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
         ]
         
-        # Build base query
+        # Build query for pre-computed vehicles table
         query = f"""
         SELECT
             robot_id,
-            date,
-            timestamp,
             latitude,
             longitude,
-            accuracy
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_LOCATIONS}.{settings.BIGQUERY_TABLE_LOCATIONS}`
-        WHERE accuracy > {settings.MIN_LOCATION_ACCURACY}
+            timestamp,
+            accuracy,
+            status,
+            battery_level,
+            last_updated
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        WHERE 1=1
         """
 
         # Add robot ID filter
@@ -97,10 +99,6 @@ class BigQueryService:
         # Add time filter
         if since:
             query += f" AND timestamp >= '{since.isoformat()}'"
-        else:
-            # Default to last 30 days for vehicle data
-            cutoff_date = datetime.utcnow() - timedelta(days=settings.VEHICLE_RETENTION_DAYS)
-            query += f" AND date >= '{cutoff_date.strftime('%Y-%m-%d')}'"
 
         # Add ordering and limit
         query += " ORDER BY timestamp DESC"
@@ -116,7 +114,7 @@ class BigQueryService:
         since: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """
-        Fetch robot trip data from BigQuery.
+        Fetch robot trip data from pre-computed BigQuery table.
 
         Args:
             robot_ids: List of specific robot IDs to filter
@@ -126,55 +124,41 @@ class BigQueryService:
         Returns:
             List of trip records
         """
-        # Use the exact query structure from the sample
+        # Use the specific robot IDs from the sample query
+        default_robots = [
+            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
+            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
+        ]
+        
+        # Build query for pre-computed trips table
         query = f"""
-        SELECT 
-            robot_id, 
-            r.created_at, 
-            TIMESTAMP_MILLIS(steps.startedAt) as trip_start, 
-            TIMESTAMP_MILLIS(steps.finishedAt) as trip_end, 
-            (steps.finishedAt-steps.startedAt)/1000 as trip_duration_seconds, 
-            steps.point_data.point_latitude as start_latitude, 
-            steps.point_data.point_longitude as start_longitude,
-            r.id as job_id,
-            steps.step_type,
-            steps.step_status,
-            r.user_id,
-            r.bot_id
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_TRIPS}.{settings.BIGQUERY_TABLE_TRIPS}` r, 
-        UNNEST(steps_data) as steps 
-        WHERE robot_id IN (
-            '4F403',
-            '4E006',
-            '4E072',
-            '4E096',
-            '4E103',
-            '4E105',
-            '4F148',
-            '4F175',
-            '4F055',
-            '4H001',
-            '4H002',
-            '4H004',
-            '4H005',
-            '4H011',
-            '4H013',
-            '4H014',
-            '4H015',
-            '4H017',
-            '4H020'
-        ) 
-        AND date(r.created_at) > '2025-07-01'
-        AND steps.point_data.point_latitude IS NOT NULL
+        SELECT
+            robot_id,
+            trip_id,
+            trip_start,
+            trip_end,
+            trip_duration_seconds,
+            start_latitude,
+            start_longitude,
+            end_latitude,
+            end_longitude,
+            status,
+            user_id,
+            job_id,
+            created_at,
+            updated_at
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+        WHERE 1=1
         """
 
-        # Add robot ID filter if specific robots requested
+        # Add robot ID filter
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
-            query = query.replace(
-                "WHERE robot_id IN (",
-                f"WHERE robot_id IN ('{robot_ids_str}'"
-            )
+            query += f" AND robot_id IN ('{robot_ids_str}')"
+        else:
+            # Use default robot list
+            robot_ids_str = "', '".join(default_robots)
+            query += f" AND robot_id IN ('{robot_ids_str}')"
 
         # Add time filters
         if end_time_hour:
@@ -182,18 +166,18 @@ class BigQueryService:
             try:
                 start_time = datetime.strptime(end_time_hour, "%Y-%m-%dT%H")
                 end_time = start_time + timedelta(hours=1)
-                query += f" AND TIMESTAMP_MILLIS(steps.finishedAt) >= '{start_time.isoformat()}'"
-                query += f" AND TIMESTAMP_MILLIS(steps.finishedAt) < '{end_time.isoformat()}'"
+                query += f" AND trip_end >= '{start_time.isoformat()}'"
+                query += f" AND trip_end < '{end_time.isoformat()}'"
             except ValueError:
                 raise ValueError(f"Invalid end_time format. Expected YYYY-MM-DDTHH, got: {end_time_hour}")
         elif since:
-            query += f" AND r.created_at >= '{since.isoformat()}'"
+            query += f" AND created_at >= '{since.isoformat()}'"
         else:
             # Default to last 7 days
             cutoff_date = datetime.utcnow() - timedelta(days=7)
-            query += f" AND date(r.created_at) >= '{cutoff_date.strftime('%Y-%m-%d')}'"
+            query += f" AND created_at >= '{cutoff_date.strftime('%Y-%m-%d')}'"
 
-        query += " ORDER BY r.created_at DESC"
+        query += " ORDER BY created_at DESC"
 
         return await self._run_query_async(query)
 
@@ -202,7 +186,7 @@ class BigQueryService:
         robot_ids: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get current status of robots (latest location data).
+        Get current status of robots from pre-computed table.
 
         Args:
             robot_ids: List of specific robot IDs to filter
@@ -216,28 +200,19 @@ class BigQueryService:
             '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
         ]
         
-        # Get latest location for each robot
+        # Query pre-computed vehicles table for current status
         query = f"""
-        WITH latest_locations AS (
-            SELECT
-                robot_id,
-                latitude,
-                longitude,
-                timestamp,
-                accuracy,
-                ROW_NUMBER() OVER (PARTITION BY robot_id ORDER BY timestamp DESC) as rn
-            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_LOCATIONS}.{settings.BIGQUERY_TABLE_LOCATIONS}`
-            WHERE accuracy > {settings.MIN_LOCATION_ACCURACY}
-            AND date >= '{(datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')}'
-        )
         SELECT
             robot_id,
             latitude,
             longitude,
             timestamp,
-            accuracy
-        FROM latest_locations
-        WHERE rn = 1
+            accuracy,
+            status,
+            battery_level,
+            last_updated
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        WHERE 1=1
         """
 
         # Add robot ID filter
@@ -249,7 +224,7 @@ class BigQueryService:
             robot_ids_str = "', '".join(default_robots)
             query += f" AND robot_id IN ('{robot_ids_str}')"
 
-        query += " ORDER BY timestamp DESC"
+        query += " ORDER BY last_updated DESC"
 
         return await self._run_query_async(query)
 
