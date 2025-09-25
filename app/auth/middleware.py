@@ -6,6 +6,7 @@ from typing import Callable
 from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.auth.jwt_handler import jwt_handler
+from app.auth.api_key_handler import api_key_handler
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -25,6 +26,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
         Process request through authentication middleware.
+        Supports both JWT (Auth0) and API key authentication.
 
         Args:
             request: FastAPI request object
@@ -43,41 +45,54 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Extract authorization header
         authorization = request.headers.get("Authorization")
+        api_key = request.headers.get("X-API-Key")
 
-        if not authorization:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authorization header missing"
-            )
+        # Try API key authentication first (simpler for third parties)
+        if api_key:
+            try:
+                auth_data = api_key_handler.validate_api_key(api_key)
+                # Add authentication data to request state
+                request.state.auth = {
+                    "provider_id": auth_data["provider_id"],
+                    "auth_type": "api_key",
+                    "permissions": auth_data["permissions"]
+                }
+                response = await call_next(request)
+                return response
+            except HTTPException:
+                # If API key fails, continue to JWT authentication
+                pass
 
-        # Check for Bearer token format
-        try:
-            scheme, token = authorization.split(" ", 1)
-            if scheme.lower() != "bearer":
-                raise ValueError("Invalid authorization scheme")
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authorization header format. Expected: Bearer <token>"
-            )
+        # Try JWT authentication (Auth0)
+        if authorization:
+            try:
+                scheme, token = authorization.split(" ", 1)
+                if scheme.lower() != "bearer":
+                    raise ValueError("Invalid authorization scheme")
+                
+                auth_data = jwt_handler.validate_token_and_extract_claims(token)
+                # Add authentication data to request state
+                request.state.auth = {
+                    "provider_id": auth_data["provider_id"],
+                    "auth_type": "jwt",
+                    "claims": auth_data["claims"]
+                }
+                response = await call_next(request)
+                return response
+            except HTTPException:
+                # Re-raise HTTP exceptions from JWT handler
+                raise
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Authentication failed: {str(e)}"
+                )
 
-        # Validate token and extract claims
-        try:
-            auth_data = jwt_handler.validate_token_and_extract_claims(token)
-            # Add authentication data to request state
-            request.state.auth = auth_data
-        except HTTPException:
-            # Re-raise HTTP exceptions from JWT handler
-            raise
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Authentication failed: {str(e)}"
-            )
-
-        # Continue to next middleware/endpoint
-        response = await call_next(request)
-        return response
+        # No valid authentication found
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Provide either X-API-Key header or Authorization: Bearer <token>"
+        )
 
 
 def get_current_provider_id(request: Request) -> str:

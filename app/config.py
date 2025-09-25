@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 
     # API Configuration
-    CORS_ORIGINS: List[str] = ["*"]  # Configure appropriately for production
+    CORS_ORIGINS: List[str] = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
     API_PREFIX: str = "/v1/provider"
 
     # Cache Configuration
