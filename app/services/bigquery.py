@@ -116,30 +116,55 @@ class BigQueryService:
         Returns:
             List of trip records
         """
+        # Use the exact query structure from the sample
         query = f"""
-        SELECT
-            robot_id,
-            r.created_at,
-            TIMESTAMP_MILLIS(steps.startedAt) as trip_start,
-            TIMESTAMP_MILLIS(steps.finishedAt) as trip_end,
-            (steps.finishedAt - steps.startedAt) / 1000 as trip_duration_seconds,
-            steps.point_data.point_latitude as start_latitude,
+        SELECT 
+            robot_id, 
+            r.created_at, 
+            TIMESTAMP_MILLIS(steps.startedAt) as trip_start, 
+            TIMESTAMP_MILLIS(steps.finishedAt) as trip_end, 
+            (steps.finishedAt-steps.startedAt)/1000 as trip_duration_seconds, 
+            steps.point_data.point_latitude as start_latitude, 
             steps.point_data.point_longitude as start_longitude,
             r.id as job_id,
             steps.step_type,
             steps.step_status,
             r.user_id,
             r.bot_id
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_TRIPS}.{settings.BIGQUERY_TABLE_TRIPS}` r,
-        UNNEST(steps_data) as steps
-        WHERE steps.point_data.point_latitude IS NOT NULL
-        AND steps.point_data.point_longitude IS NOT NULL
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_TRIPS}.{settings.BIGQUERY_TABLE_TRIPS}` r, 
+        UNNEST(steps_data) as steps 
+        WHERE robot_id IN (
+            '4F403',
+            '4E006',
+            '4E072',
+            '4E096',
+            '4E103',
+            '4E105',
+            '4F148',
+            '4F175',
+            '4F055',
+            '4H001',
+            '4H002',
+            '4H004',
+            '4H005',
+            '4H011',
+            '4H013',
+            '4H014',
+            '4H015',
+            '4H017',
+            '4H020'
+        ) 
+        AND date(r.created_at) > '2025-07-01'
+        AND steps.point_data.point_latitude IS NOT NULL
         """
 
-        # Add robot ID filter
+        # Add robot ID filter if specific robots requested
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
+            query = query.replace(
+                "WHERE robot_id IN (",
+                f"WHERE robot_id IN ('{robot_ids_str}'"
+            )
 
         # Add time filters
         if end_time_hour:
@@ -210,17 +235,26 @@ class BigQueryService:
 
     async def get_active_robot_list(self) -> List[str]:
         """
-        Get list of currently active robot IDs.
+        Get list of currently active robot IDs from the specific robot list.
 
         Returns:
             List of robot IDs that have recent activity
         """
+        # Use the specific robot IDs from the sample query
+        robot_ids = [
+            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
+            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
+        ]
+        
+        # Check which robots have recent activity
         cutoff_date = datetime.utcnow() - timedelta(days=settings.VEHICLE_RETENTION_DAYS)
-
+        robot_ids_str = "', '".join(robot_ids)
+        
         query = f"""
         SELECT DISTINCT robot_id
         FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_LOCATIONS}.{settings.BIGQUERY_TABLE_LOCATIONS}`
-        WHERE date >= '{cutoff_date.strftime('%Y-%m-%d')}'
+        WHERE robot_id IN ('{robot_ids_str}')
+        AND date >= '{cutoff_date.strftime('%Y-%m-%d')}'
         AND accuracy > {settings.MIN_LOCATION_ACCURACY}
         ORDER BY robot_id
         """

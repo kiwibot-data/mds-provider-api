@@ -94,6 +94,63 @@ class DataTransformer:
             properties={}
         )
 
+    def get_robot_model_from_id(self, robot_id: str) -> str:
+        """
+        Determine robot model based on robot_id following the specified pattern.
+        
+        Args:
+            robot_id: Robot identifier string
+            
+        Returns:
+            Robot model string
+        """
+        try:
+            # Extract prefix and number from robot_id
+            # Assuming robot_id format like "4A001", "4B123", etc.
+            if len(robot_id) >= 3:
+                prefix = robot_id[:2]  # First 2 characters
+                number_str = robot_id[2:]  # Rest of the string
+                
+                # Try to extract number from the string
+                number = None
+                for i, char in enumerate(number_str):
+                    if not char.isdigit():
+                        number = int(number_str[:i]) if i > 0 else None
+                        break
+                else:
+                    number = int(number_str)
+                
+                if number is not None:
+                    # Apply the model determination logic
+                    if prefix == "4A" and 1 <= number <= 30:
+                        return "Kiwibot 4.0"
+                    elif prefix == "4B" and 1 <= number <= 120:
+                        return "Kiwibot 4.1A"
+                    elif prefix == "4C" and 1 <= number <= 100:
+                        return "Kiwibot 4.1B"
+                    elif prefix == "4D" and 1 <= number <= 300:
+                        return "Kiwibot 4.2A"
+                    elif prefix == "4E" and 1 <= number <= 120:
+                        return "Kiwibot 4.3B"
+                    elif prefix == "4E" and 121 <= number <= 130:
+                        return "Kiwibot 4.3C"
+                    elif prefix == "4E" and 200 <= number <= 290:
+                        return "Kiwibot 4.3C"
+                    elif prefix == "4F" and 1 <= number <= 262:
+                        return "Kiwibot 4.3D"
+                    elif prefix == "4F" and 301 <= number <= 322:
+                        return "Kiwibot 4.3E"
+                    elif prefix == "4F" and 401 <= number <= 410:
+                        return "Kiwibot 4.3F"
+                    elif prefix == "4G" and 1 <= number <= 5:
+                        return "Kiwibot 4.3G"
+                    elif prefix == "4H" and 1 <= number <= 81:
+                        return "Kiwibot 4.4A"
+            
+            return "Unknown Version"
+        except (ValueError, IndexError):
+            return "Unknown Version"
+
     def transform_robot_to_vehicle(self, robot_data: Dict[str, Any]) -> Vehicle:
         """
         Transform robot data to MDS Vehicle model.
@@ -109,13 +166,16 @@ class DataTransformer:
             raise ValueError("Robot data missing robot_id")
 
         device_id = self.robot_id_to_device_id(robot_id)
+        
+        # Determine robot model based on robot_id
+        robot_model = self.get_robot_model_from_id(robot_id)
 
         # Create vehicle attributes based on robot properties
         vehicle_attributes = VehicleAttributes(
-            year=2023,  # Default year - enhance with actual data
+            year=2025,  # Updated to 2025 as requested
             make="Kiwibot",
-            model="Delivery Robot",
-            color="Green",  # Default Kiwibot color
+            model=robot_model,  # Use determined model
+            color="Blue",  # Updated to blue as requested
             equipped_cameras=4,  # Typical Kiwibot configuration
             wheel_count=4,
             width=0.6,  # Approximate Kiwibot dimensions
@@ -138,9 +198,9 @@ class DataTransformer:
             provider_id=self.provider_id,
             vehicle_type=VehicleType.ROBOT,
             propulsion_types=[PropulsionType.ELECTRIC],
-            year=2023,
+            year=2025,  # Updated to 2025
             mfgr="Kiwibot",
-            model="Delivery Robot",
+            model=robot_model,  # Use determined model
             vehicle_attributes=vehicle_attributes,
             accessibility_attributes=accessibility_attributes
         )
