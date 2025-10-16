@@ -23,6 +23,23 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     print("Starting MDS Provider API...")
+    print(f"MDS Version: {settings.MDS_VERSION}")
+    print(f"Provider ID: {settings.PROVIDER_ID}")
+    print(f"Debug Mode: {settings.DEBUG}")
+    
+    # Validate configuration
+    try:
+        from app.auth.jwt_handler import jwt_handler
+        print("✅ JWT handler initialized")
+    except Exception as e:
+        print(f"⚠️  JWT handler initialization warning: {e}")
+    
+    try:
+        from app.auth.api_key_handler import api_key_handler
+        print("✅ API key handler initialized")
+    except Exception as e:
+        print(f"⚠️  API key handler initialization warning: {e}")
+    
     yield
     # Shutdown
     print("Shutting down MDS Provider API...")
@@ -156,5 +173,27 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": int(time.time() * 1000),
-        "version": settings.MDS_VERSION
+        "version": settings.MDS_VERSION,
+        "provider_id": settings.PROVIDER_ID,
+        "debug_mode": settings.DEBUG
     }
+
+
+@app.get("/test-auth", include_in_schema=False)
+async def test_auth(request: Request):
+    """Test authentication endpoint for debugging."""
+    try:
+        from app.auth.middleware import get_current_provider_id
+        provider_id = get_current_provider_id(request)
+        auth_type = request.state.auth.get("auth_type", "unknown") if hasattr(request.state, "auth") else "none"
+        return {
+            "status": "authenticated",
+            "provider_id": provider_id,
+            "auth_type": auth_type
+        }
+    except Exception as e:
+        return {
+            "status": "authentication_failed",
+            "error": str(e),
+            "debug_mode": settings.DEBUG
+        }

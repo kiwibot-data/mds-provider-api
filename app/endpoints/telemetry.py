@@ -130,6 +130,7 @@ async def get_telemetry(
                         accuracy=5.0  # Default GPS accuracy in meters
                     )
                     start_telemetry = Telemetry(
+                        provider_id=settings.PROVIDER_ID_UUID,
                         device_id=device_id,
                         timestamp=start_time_ms,
                         gps=start_gps
@@ -146,6 +147,7 @@ async def get_telemetry(
                         accuracy=5.0  # Default GPS accuracy in meters
                     )
                     end_telemetry = Telemetry(
+                        provider_id=settings.PROVIDER_ID_UUID,
                         device_id=device_id,
                         timestamp=end_time_ms,
                         gps=end_gps

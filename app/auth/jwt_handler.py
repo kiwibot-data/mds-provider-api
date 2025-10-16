@@ -18,6 +18,12 @@ class JWTHandler:
         self.algorithm = settings.JWT_ALGORITHM
         self.auth0_domain = settings.AUTH0_DOMAIN
         self.audience = settings.AUTH0_AUDIENCE
+        
+        # Check if Auth0 is properly configured
+        if not self.auth0_domain or not self.audience:
+            print("WARNING: Auth0 not properly configured. JWT authentication will fail.")
+            print(f"Auth0_DOMAIN: {self.auth0_domain}")
+            print(f"AUTH0_AUDIENCE: {self.audience}")
 
     @lru_cache(maxsize=1)
     def get_jwks(self) -> Dict[str, Any]:
@@ -41,6 +47,21 @@ class JWTHandler:
     def get_signing_key(self, token: str) -> str:
         """Get the signing key for token verification."""
         try:
+            # Validate token format first
+            if not token or not isinstance(token, str):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token format"
+                )
+            
+            # Check if token has proper JWT structure (3 parts separated by dots)
+            token_parts = token.split('.')
+            if len(token_parts) != 3:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid JWT token format. Expected 3 parts separated by dots"
+                )
+            
             # Decode header without verification to get kid
             unverified_header = jwt.get_unverified_header(token)
             kid = unverified_header.get("kid")
@@ -66,6 +87,11 @@ class JWTHandler:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid token: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Token processing failed: {str(e)}"
             )
 
     def verify_token(self, token: str) -> Dict[str, Any]:

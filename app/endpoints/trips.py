@@ -140,7 +140,7 @@ async def get_trips(
 
         # Check if the requested hour is in the future
         # Temporarily disabled for testing with future data
-        # now = datetime.utcnow()
+        now = datetime.utcnow()
         # if end_time_dt >= now:
         #     raise HTTPException(
         #         status_code=status.HTTP_404_NOT_FOUND,

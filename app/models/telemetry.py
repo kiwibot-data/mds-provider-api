@@ -41,6 +41,7 @@ class GPS(BaseModel):
 
 class Telemetry(BaseModel):
     """Telemetry model for vehicle GPS data."""
+    provider_id: str = Field(..., description="Provider identifier (UUID)")
     device_id: UUID = Field(..., description="Unique device identifier")
     timestamp: int = Field(..., description="Timestamp when GPS data was recorded (milliseconds)")
     gps: GPS = Field(..., description="GPS coordinates and metadata")

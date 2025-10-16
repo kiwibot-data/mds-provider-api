@@ -43,6 +43,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
+        # Development mode: Skip authentication if no auth headers provided
+        # This helps with deployment testing when Auth0 is not configured
+        from app.config import settings
+        if settings.DEBUG and not request.headers.get("Authorization") and not request.headers.get("X-API-Key"):
+            # Add default authentication for development
+            request.state.auth = {
+                "provider_id": settings.PROVIDER_ID,
+                "auth_type": "development",
+                "permissions": ["read"]
+            }
+            return await call_next(request)
+
         # Extract authorization header
         authorization = request.headers.get("Authorization")
         api_key = request.headers.get("X-API-Key")
@@ -66,9 +78,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Try JWT authentication (Auth0)
         if authorization:
             try:
-                scheme, token = authorization.split(" ", 1)
+                # Check if authorization header has proper format
+                if not authorization.strip():
+                    raise ValueError("Empty authorization header")
+                
+                # Split authorization header safely
+                auth_parts = authorization.split(" ", 1)
+                if len(auth_parts) != 2:
+                    raise ValueError("Invalid authorization header format. Expected 'Bearer <token>'")
+                
+                scheme, token = auth_parts
                 if scheme.lower() != "bearer":
-                    raise ValueError("Invalid authorization scheme")
+                    raise ValueError("Invalid authorization scheme. Expected 'Bearer'")
+                
+                # Validate token is not empty
+                if not token.strip():
+                    raise ValueError("Empty token in authorization header")
                 
                 auth_data = jwt_handler.validate_token_and_extract_claims(token)
                 # Add authentication data to request state
@@ -82,6 +107,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             except HTTPException:
                 # Re-raise HTTP exceptions from JWT handler
                 raise
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid authorization header: {str(e)}"
+                )
             except Exception as e:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
