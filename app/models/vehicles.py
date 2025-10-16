@@ -41,20 +41,18 @@ class AccessibilityAttributes(BaseModel):
 class Vehicle(BaseModel):
     """Vehicle information model."""
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: str = Field(..., description="Provider identifier")
-    vehicle_type: VehicleType = Field(VehicleType.ROBOT, description="Vehicle type")
+    vehicle_id: UUID = Field(..., description="Unique vehicle identifier (same as device_id)")
+    provider_id: str = Field(..., description="Provider identifier (UUID)")
+    vehicle_type: VehicleType = Field(VehicleType.DELIVERY_ROBOT, description="Vehicle type")
     propulsion_types: List[PropulsionType] = Field([PropulsionType.ELECTRIC], description="Propulsion types")
-    year: Optional[int] = Field(None, description="Year of manufacture")
-    mfgr: Optional[str] = Field(None, description="Vehicle manufacturer")
-    model: Optional[str] = Field(None, description="Vehicle model")
     vehicle_attributes: Optional[VehicleAttributes] = Field(None, description="Vehicle-specific attributes")
-    accessibility_attributes: Optional[AccessibilityAttributes] = Field(None, description="Accessibility features")
+    accessibility_attributes: Optional[List[AccessibilityAttributes]] = Field(None, description="Accessibility features")
 
 
 class VehicleStatus(BaseModel):
     """Vehicle status model for real-time monitoring."""
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: str = Field(..., description="Provider identifier")
+    provider_id: str = Field(..., description="Provider identifier (UUID)")
     vehicle_state: VehicleState = Field(..., description="Current vehicle state")
     last_vehicle_state: Optional[VehicleState] = Field(None, description="Previous vehicle state")
     last_event_time: int = Field(..., description="Timestamp of last state change (milliseconds)")
@@ -66,6 +64,8 @@ class VehicleStatus(BaseModel):
 class VehiclesResponse(MDSResponse):
     """Response model for /vehicles endpoint."""
     vehicles: List[Vehicle] = Field(..., description="Array of vehicle objects")
+    last_updated: int = Field(..., description="Timestamp when data was last updated (milliseconds)")
+    ttl: int = Field(..., description="Time to live for this data (milliseconds)")
     links: Optional[PaginationLinks] = Field(None, description="Pagination links")
 
 

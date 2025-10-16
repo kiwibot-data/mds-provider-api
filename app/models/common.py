@@ -94,6 +94,7 @@ class EventType(str, Enum):
     TRIP_RESUME = "trip_resume"
     TRIP_START = "trip_start"
     TRIP_PAUSE = "trip_pause"
+    OTHER = "other"
 
 
 class TripType(str, Enum):
@@ -114,7 +115,7 @@ class DriverType(str, Enum):
 
 class VehicleType(str, Enum):
     """Vehicle type for delivery robots."""
-    ROBOT = "robot"
+    DELIVERY_ROBOT = "delivery_robot"
 
 
 class PropulsionType(str, Enum):
@@ -132,7 +133,7 @@ class PaginationLinks(BaseModel):
 
 class MDSResponse(BaseModel):
     """Base MDS response model."""
-    version: str = Field(MDSConstants.CONTENT_TYPE_JSON.split("version=")[1], description="MDS version")
+    version: str = Field("2.0.0", description="MDS version")
 
     class Config:
         json_encoders = {

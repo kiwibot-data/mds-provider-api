@@ -324,6 +324,58 @@ class BigQueryService:
         logger.info(f"Events query returned {len(result)} rows")
         return result
 
+    async def get_robot_telemetry(
+        self,
+        telemetry_time: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch robot telemetry data from pre-computed BigQuery table.
+
+        Args:
+            telemetry_time: Hour in format YYYY-MM-DDTHH for MDS compliance
+
+        Returns:
+            List of telemetry records (using trip start/end points as minimum viable telemetry)
+        """
+        # Use the specific robot IDs from the sample query
+        default_robots = [
+            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
+            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
+        ]
+        
+        # Build query for pre-computed trips table (using start/end points as telemetry)
+        query = f"""
+        SELECT
+            robot_id,
+            trip_id,
+            trip_start,
+            trip_end,
+            start_latitude,
+            start_longitude,
+            end_latitude,
+            end_longitude,
+            status
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+        WHERE 1=1
+        """
+
+        # Add robot ID filter
+        robot_ids_str = "', '".join(default_robots)
+        query += f" AND robot_id IN ('{robot_ids_str}')"
+
+        # Add time filter for the specified hour
+        try:
+            start_time = datetime.strptime(telemetry_time, "%Y-%m-%dT%H")
+            end_time = start_time + timedelta(hours=1)
+            query += f" AND trip_end >= '{start_time.isoformat()}'"
+            query += f" AND trip_end < '{end_time.isoformat()}'"
+        except ValueError:
+            raise ValueError(f"Invalid telemetry_time format. Expected YYYY-MM-DDTHH, got: {telemetry_time}")
+
+        query += " ORDER BY trip_start ASC"
+
+        return await self._run_query_async(query)
+
     async def check_data_availability(self, hour: str) -> bool:
         """
         Check if data is available for a given hour.

@@ -21,79 +21,6 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
-    response_model=VehiclesResponse,
-    summary="Get vehicle information",
-    description="Returns vehicle information for delivery robots. Contains rarely-changed vehicle properties."
-)
-@router.get(
-    "/{device_id}",
-    response_model=VehiclesResponse,
-    summary="Get specific vehicle information",
-    description="Returns information for a specific vehicle by device_id."
-)
-async def get_vehicles(
-    request: Request,
-    device_id: Optional[UUID] = None
-):
-    """
-    Get vehicle information.
-
-    This endpoint returns vehicle properties that do not change often.
-    When called without device_id, returns all vehicles deployed in the last 30 days.
-    """
-    try:
-        # Authenticate request
-        provider_id = get_current_provider_id(request)
-
-        # Get active robot list
-        active_robots = await bigquery_service.get_active_robot_list()
-
-        if not active_robots:
-            # Return empty response if no active robots
-            return VehiclesResponse(vehicles=[])
-
-        # If specific device_id requested, filter to that robot
-        if device_id:
-            # Convert device_id back to robot_id for filtering
-            target_robot_id = None
-            for robot_id in active_robots:
-                if data_transformer.robot_id_to_device_id(robot_id) == device_id:
-                    target_robot_id = robot_id
-                    break
-
-            if not target_robot_id:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"error_code": "vehicle_not_found", "error_details": f"Vehicle {device_id} not found"}
-                )
-
-            active_robots = [target_robot_id]
-
-        # Transform robot IDs to vehicle data
-        # For now, create vehicle objects from robot IDs
-        # In production, this would fetch actual vehicle metadata
-        vehicles = []
-        for robot_id in active_robots:
-            robot_data = {"robot_id": robot_id}
-            vehicle = data_transformer.transform_robot_to_vehicle(robot_data)
-            vehicles.append(vehicle)
-
-        logger.info(f"Returning {len(vehicles)} vehicles for provider {provider_id}")
-
-        return VehiclesResponse(vehicles=vehicles)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in get_vehicles: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
-        )
-
-
-@router.get(
     "/status",
     response_model=VehicleStatusResponse,
     summary="Get vehicle status",
@@ -169,6 +96,92 @@ async def get_vehicle_status(
         raise
     except Exception as e:
         logger.error(f"Error in get_vehicle_status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error_code": "internal_error", "error_details": str(e)}
+        )
+
+
+@router.get(
+    "/",
+    response_model=VehiclesResponse,
+    summary="Get vehicle information",
+    description="Returns vehicle information for delivery robots. Contains rarely-changed vehicle properties."
+)
+@router.get(
+    "/{device_id}",
+    response_model=VehiclesResponse,
+    summary="Get specific vehicle information",
+    description="Returns information for a specific vehicle by device_id."
+)
+async def get_vehicles(
+    request: Request,
+    device_id: Optional[UUID] = None
+):
+    """
+    Get vehicle information.
+
+    This endpoint returns vehicle properties that do not change often.
+    When called without device_id, returns all vehicles deployed in the last 30 days.
+    """
+    try:
+        # Authenticate request
+        provider_id = get_current_provider_id(request)
+
+        # Get active robot list
+        active_robots = await bigquery_service.get_active_robot_list()
+
+        if not active_robots:
+            # Return empty response if no active robots
+            current_time = int(datetime.utcnow().timestamp() * 1000)
+            return VehiclesResponse(
+                vehicles=[],
+                last_updated=current_time,
+                ttl=settings.CACHE_TTL_VEHICLES * 1000
+            )
+
+        # If specific device_id requested, filter to that robot
+        if device_id:
+            # Convert device_id back to robot_id for filtering
+            target_robot_id = None
+            for robot_id in active_robots:
+                if data_transformer.robot_id_to_device_id(robot_id) == device_id:
+                    target_robot_id = robot_id
+                    break
+
+            if not target_robot_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error_code": "vehicle_not_found", "error_details": f"Vehicle {device_id} not found"}
+                )
+
+            active_robots = [target_robot_id]
+
+        # Transform robot IDs to vehicle data
+        # For now, create vehicle objects from robot IDs
+        # In production, this would fetch actual vehicle metadata
+        vehicles = []
+        for robot_id in active_robots:
+            robot_data = {"robot_id": robot_id}
+            vehicle = data_transformer.transform_robot_to_vehicle(robot_data)
+            vehicles.append(vehicle)
+
+        # Calculate timestamps
+        current_time = int(datetime.utcnow().timestamp() * 1000)
+        ttl = settings.CACHE_TTL_VEHICLES * 1000  # Convert to milliseconds
+
+        logger.info(f"Returning {len(vehicles)} vehicles for provider {provider_id}")
+
+        return VehiclesResponse(
+            vehicles=vehicles,
+            last_updated=current_time,
+            ttl=ttl
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_vehicles: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error_code": "internal_error", "error_details": str(e)}

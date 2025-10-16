@@ -22,7 +22,7 @@ class DataTransformer:
 
     def __init__(self):
         """Initialize transformer with provider settings."""
-        self.provider_id = settings.PROVIDER_ID
+        self.provider_id = settings.PROVIDER_ID_UUID
 
     def robot_id_to_device_id(self, robot_id: str) -> UUID:
         """
@@ -195,14 +195,12 @@ class DataTransformer:
 
         return Vehicle(
             device_id=device_id,
-            provider_id=self.provider_id,
-            vehicle_type=VehicleType.ROBOT,
+            vehicle_id=device_id,  # Same as device_id per MDS spec
+            provider_id=settings.PROVIDER_ID_UUID,
+            vehicle_type=VehicleType.DELIVERY_ROBOT,
             propulsion_types=[PropulsionType.ELECTRIC],
-            year=2025,  # Updated to 2025
-            mfgr="Kiwibot",
-            model=robot_model,  # Use determined model
             vehicle_attributes=vehicle_attributes,
-            accessibility_attributes=accessibility_attributes
+            accessibility_attributes=[accessibility_attributes]  # Make it a list
         )
 
     def transform_location_to_vehicle_status(
@@ -254,7 +252,7 @@ class DataTransformer:
 
         return VehicleStatus(
             device_id=device_id,
-            provider_id=self.provider_id,
+            provider_id=settings.PROVIDER_ID_UUID,
             vehicle_state=vehicle_state,
             last_event_time=last_event_time,
             last_event_types=last_event_types,
@@ -281,6 +279,13 @@ class DataTransformer:
         """Generate UUID for trip based on job data."""
         job_id = trip_data.get('job_id', trip_data.get('id', ''))
         return uuid5(NAMESPACE_DNS, f"{self.provider_id}.trip.{job_id}")
+
+    def _generate_event_id(self, event_data: Dict[str, Any]) -> UUID:
+        """Generate UUID for event based on event data."""
+        robot_id = event_data.get('robot_id', '')
+        event_time = event_data.get('event_time', '')
+        event_type = event_data.get('event_type', '')
+        return uuid5(NAMESPACE_DNS, f"{self.provider_id}.event.{robot_id}.{event_time}.{event_type}")
 
     def batch_transform_vehicles(self, robot_data_list: List[Dict[str, Any]]) -> List[Vehicle]:
         """

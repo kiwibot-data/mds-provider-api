@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.endpoints import vehicles, trips, events, admin
+from app.endpoints import vehicles, trips, events, admin, telemetry
 from app.auth.middleware import AuthMiddleware
 from app.config import settings
 
@@ -127,6 +127,13 @@ app.include_router(
     admin.router,
     prefix="/admin",
     tags=["Admin"],
+    responses={404: {"description": "Not found"}},
+)
+
+app.include_router(
+    telemetry.router,
+    prefix="/telemetry",
+    tags=["Telemetry"],
     responses={404: {"description": "Not found"}},
 )
 

@@ -36,12 +36,13 @@ class FareAttributes(BaseModel):
 
 class Trip(BaseModel):
     """Trip model for delivery robots."""
-    provider_id: str = Field(..., description="Provider identifier")
+    provider_id: str = Field(..., description="Provider identifier (UUID)")
     device_id: UUID = Field(..., description="Unique device identifier")
     trip_id: UUID = Field(..., description="Unique trip identifier")
-    trip_duration: int = Field(..., description="Trip duration in seconds")
-    trip_distance: Optional[int] = Field(None, description="Trip distance in meters")
-    route: GeoJSONFeature = Field(..., description="Trip route as GeoJSON LineString")
+    duration: int = Field(..., description="Trip duration in seconds")
+    distance: Optional[int] = Field(None, description="Trip distance in meters")
+    start_location: GeoJSONFeature = Field(..., description="Trip start location as GeoJSON Point")
+    end_location: GeoJSONFeature = Field(..., description="Trip end location as GeoJSON Point")
     accuracy: Optional[int] = Field(None, description="GPS accuracy in meters")
     start_time: int = Field(..., description="Trip start time (milliseconds)")
     end_time: int = Field(..., description="Trip end time (milliseconds)")

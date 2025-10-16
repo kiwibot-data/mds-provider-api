@@ -3,7 +3,7 @@ Events endpoints for MDS Provider API.
 """
 
 import logging
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request, Query, status
 from fastapi.responses import JSONResponse
@@ -35,7 +35,6 @@ def create_event_from_location_change(
     device_id = data_transformer.robot_id_to_device_id(robot_id)
 
     # Determine state change based on location timing
-    prev_time = prev_location.get('timestamp') if prev_location else None
     current_time = current_location.get('timestamp')
 
     if not current_time:
@@ -128,6 +127,7 @@ async def get_historical_events(
         data_available = await bigquery_service.check_data_availability(event_time)
 
         # If the hour is recent but data isn't ready yet, return 202 Accepted
+        now = datetime.utcnow()
         hours_ago = (now - event_time_dt).total_seconds() / 3600
         if hours_ago < 2 and not data_available:
             return JSONResponse(
@@ -197,12 +197,16 @@ async def get_historical_events(
                     event_types = [EventType.OTHER]
                     vehicle_state = VehicleState.UNKNOWN
 
+                # Generate event_id UUID from event data
+                event_id = data_transformer._generate_event_id(event_data)
+
                 event = Event(
-                    provider_id=settings.PROVIDER_ID,
+                    event_id=event_id,
+                    provider_id=settings.PROVIDER_ID_UUID,
                     device_id=device_id,
                     event_types=event_types,
                     vehicle_state=vehicle_state,
-                    event_time=event_time_ms,
+                    timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
                     event_location=event_location
                 )
@@ -331,12 +335,16 @@ async def get_recent_events(
                     event_types = [EventType.OTHER]
                     vehicle_state = VehicleState.UNKNOWN
 
+                # Generate event_id UUID from event data
+                event_id = data_transformer._generate_event_id(event_data)
+
                 event = Event(
-                    provider_id=settings.PROVIDER_ID,
+                    event_id=event_id,
+                    provider_id=settings.PROVIDER_ID_UUID,
                     device_id=device_id,
                     event_types=event_types,
                     vehicle_state=vehicle_state,
-                    event_time=event_time_ms,
+                    timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
                     event_location=event_location
                 )
@@ -345,19 +353,13 @@ async def get_recent_events(
                 logger.error(f"Failed to transform event data: {str(e)}")
                 continue
 
-        # Sort events by event_time
-        events.sort(key=lambda x: x.event_time)
-
-        # Calculate response metadata
-        current_time = int(datetime.utcnow().timestamp() * 1000)
-        ttl = settings.CACHE_TTL_EVENTS * 1000  # Convert to milliseconds
+        # Sort events by timestamp
+        events.sort(key=lambda x: x.timestamp)
 
         logger.info(f"Returning {len(events)} recent events for provider {provider_id}")
 
         return RealtimeEventsResponse(
-            events=events,
-            last_updated=current_time,
-            ttl=ttl
+            events=events
         )
 
     except HTTPException:

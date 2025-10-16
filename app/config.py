@@ -3,8 +3,7 @@ Configuration settings for MDS Provider API.
 """
 
 import os
-from typing import List
-from pydantic import Field, field_validator
+from uuid import uuid5, NAMESPACE_DNS
 from pydantic_settings import BaseSettings
 
 
@@ -23,6 +22,11 @@ class Settings(BaseSettings):
     PROVIDER_ID: str = os.getenv("MDS_PROVIDER_ID", "kiwibot-delivery-robots")
     PROVIDER_NAME: str = "Kiwibot Delivery Robots"
     API_BASE_URL: str = os.getenv("API_BASE_URL", "https://mds.kiwibot.com")
+    
+    @property
+    def PROVIDER_ID_UUID(self) -> str:
+        """Generate consistent UUID from provider_id string."""
+        return str(uuid5(NAMESPACE_DNS, self.PROVIDER_ID))
 
     # Authentication
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")

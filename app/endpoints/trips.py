@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.models.trips import TripsResponse, Trip, TripAttributes, FareAttributes
 from app.models.common import (
-    GeoJSONFeature, GeoJSONLineString, TripType, DriverType
+    GeoJSONFeature, GeoJSONPoint, TripType, DriverType
 )
 from app.services.bigquery import bigquery_service
 from app.services.transformers import data_transformer
@@ -47,30 +47,36 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
     else:
         end_time_ms = int(end_time * 1000) if end_time else 0
 
-    # Create route geometry
+    # Create start and end location geometries
     start_lat = trip_data.get('start_latitude')
     start_lng = trip_data.get('start_longitude')
+    end_lat = trip_data.get('end_latitude')
+    end_lng = trip_data.get('end_longitude')
 
     if start_lat is None or start_lng is None:
-        raise ValueError("Trip data missing location coordinates")
+        raise ValueError("Trip data missing start location coordinates")
+    
+    if end_lat is None or end_lng is None:
+        raise ValueError("Trip data missing end location coordinates")
 
-    # For now, create a simple 2-point route (start and end)
-    # In production, this would include the full route with intermediate points
-    route_coordinates = [
-        [start_lng, start_lat],  # Start point
-        [start_lng, start_lat]   # End point (same for now - enhance with actual route data)
-    ]
-
-    route = GeoJSONFeature(
+    # Create start location GeoJSON
+    start_location = GeoJSONFeature(
         type="Feature",
-        geometry=GeoJSONLineString(
-            type="LineString",
-            coordinates=route_coordinates
+        geometry=GeoJSONPoint(
+            type="Point",
+            coordinates=[start_lng, start_lat]  # GeoJSON is [longitude, latitude]
         ),
-        properties={
-            "trip_id": str(trip_id),
-            "duration_seconds": duration_seconds
-        }
+        properties={}
+    )
+
+    # Create end location GeoJSON
+    end_location = GeoJSONFeature(
+        type="Feature",
+        geometry=GeoJSONPoint(
+            type="Point",
+            coordinates=[end_lng, end_lat]  # GeoJSON is [longitude, latitude]
+        ),
+        properties={}
     )
 
     # Create trip attributes
@@ -86,11 +92,12 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
     )
 
     return Trip(
-        provider_id=settings.PROVIDER_ID,
+        provider_id=settings.PROVIDER_ID_UUID,
         device_id=device_id,
         trip_id=trip_id,
-        trip_duration=int(duration_seconds),
-        route=route,
+        duration=int(duration_seconds),
+        start_location=start_location,
+        end_location=end_location,
         start_time=start_time_ms,
         end_time=end_time_ms,
         trip_type=TripType.DELIVERY,
