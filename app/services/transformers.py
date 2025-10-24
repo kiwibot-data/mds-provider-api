@@ -199,6 +199,7 @@ class DataTransformer:
             provider_id=settings.PROVIDER_ID_UUID,
             vehicle_type=VehicleType.DELIVERY_ROBOT,
             propulsion_types=[PropulsionType.ELECTRIC],
+            data_provider_id="kiwibot-delivery-robots",
             vehicle_attributes=vehicle_attributes,
             accessibility_attributes=[accessibility_attributes]  # Make it a list
         )
@@ -250,12 +251,20 @@ class DataTransformer:
         if trip_data:
             trip_ids = [self._generate_trip_id(trip) for trip in trip_data]
 
+        # Generate last_event and last_telemetry IDs
+        from uuid import uuid5, NAMESPACE_DNS
+        last_event_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.event.{robot_id}.{last_event_time}")
+        last_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{robot_id}.{last_event_time}")
+
         return VehicleStatus(
             device_id=device_id,
             provider_id=settings.PROVIDER_ID_UUID,
             vehicle_state=vehicle_state,
             last_event_time=last_event_time,
             last_event_types=last_event_types,
+            last_event=last_event_id,
+            last_telemetry=last_telemetry_id,
+            data_provider_id="kiwibot-delivery-robots",
             current_location=current_location,
             trip_ids=trip_ids if trip_ids else None
         )

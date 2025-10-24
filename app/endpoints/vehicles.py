@@ -89,7 +89,8 @@ async def get_vehicle_status(
         return VehicleStatusResponse(
             vehicles_status=vehicle_statuses,
             last_updated=current_time,
-            ttl=ttl
+            ttl=ttl,
+            links={"self": "/vehicles/status"}
         )
 
     except HTTPException:
@@ -175,7 +176,8 @@ async def get_vehicles(
         return VehiclesResponse(
             vehicles=vehicles,
             last_updated=current_time,
-            ttl=ttl
+            ttl=ttl,
+            links=[{"rel": "self", "href": "/vehicles/"}]
         )
 
     except HTTPException:
