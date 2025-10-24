@@ -91,11 +91,30 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
         payment_type="mobile_app"  # Default payment type
     )
 
+    # Calculate distance from coordinates if not provided
+    distance_meters = trip_data.get('trip_distance_meters', 0)
+    if distance_meters == 0 and start_lat and start_lng and end_lat and end_lng:
+        # Calculate distance using Haversine formula
+        from math import radians, cos, sin, asin, sqrt
+        
+        def haversine_distance(lat1, lon1, lat2, lon2):
+            """Calculate distance between two points using Haversine formula."""
+            R = 6371000  # Earth's radius in meters
+            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            c = 2 * asin(sqrt(a))
+            return R * c
+        
+        distance_meters = int(haversine_distance(start_lat, start_lng, end_lat, end_lng))
+
     return Trip(
         provider_id=settings.PROVIDER_ID_UUID,
         device_id=device_id,
         trip_id=trip_id,
         duration=int(duration_seconds),
+        distance=distance_meters,  # Required field in MDS 2.0
         start_location=start_location,
         end_location=end_location,
         start_time=start_time_ms,

@@ -57,14 +57,20 @@ def create_event_from_location_change(
     if lat is not None and lng is not None:
         event_location = data_transformer.transform_location_to_geojson(lat, lng)
 
+    # Generate event_id UUID from event data
+    from uuid import uuid5, NAMESPACE_DNS
+    event_id_str = f"{settings.PROVIDER_ID}.event.{robot_id}.{event_time_ms}"
+    event_id = uuid5(NAMESPACE_DNS, event_id_str)
+
     return Event(
-        provider_id=settings.PROVIDER_ID,
+        event_id=event_id,
+        provider_id=settings.PROVIDER_ID_UUID,
         device_id=device_id,
         event_types=[EventType(et) for et in event_types],
         vehicle_state=vehicle_state,
-        event_time=event_time_ms,
+        timestamp=event_time_ms,
         publication_time=int(datetime.utcnow().timestamp() * 1000),
-        event_location=event_location
+        location=event_location
     )
 
 
@@ -189,13 +195,13 @@ async def get_historical_events(
                 event_type_str = event_data.get('event_type', 'other')
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
-                    vehicle_state = VehicleState.TRIPPING
+                    vehicle_state = VehicleState.ON_TRIP
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
                 else:
-                    event_types = [EventType.OTHER]
-                    vehicle_state = VehicleState.UNKNOWN
+                    event_types = [EventType.LOCATED]
+                    vehicle_state = VehicleState.AVAILABLE
 
                 # Generate event_id UUID from event data
                 event_id = data_transformer._generate_event_id(event_data)
@@ -208,7 +214,7 @@ async def get_historical_events(
                     vehicle_state=vehicle_state,
                     timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
-                    event_location=event_location
+                    location=event_location
                 )
                 events.append(event)
             except Exception as e:
@@ -327,13 +333,13 @@ async def get_recent_events(
                 event_type_str = event_data.get('event_type', 'other')
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
-                    vehicle_state = VehicleState.TRIPPING
+                    vehicle_state = VehicleState.ON_TRIP
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
                 else:
-                    event_types = [EventType.OTHER]
-                    vehicle_state = VehicleState.UNKNOWN
+                    event_types = [EventType.LOCATED]
+                    vehicle_state = VehicleState.AVAILABLE
 
                 # Generate event_id UUID from event data
                 event_id = data_transformer._generate_event_id(event_data)
@@ -346,7 +352,7 @@ async def get_recent_events(
                     vehicle_state=vehicle_state,
                     timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
-                    event_location=event_location
+                    location=event_location
                 )
                 events.append(event)
             except Exception as e:

@@ -39,26 +39,41 @@ class AccessibilityAttributes(BaseModel):
 
 
 class Vehicle(BaseModel):
-    """Vehicle information model."""
+    """Vehicle information model - MDS 2.0 compliant."""
+    # Required fields per MDS 2.0
     device_id: UUID = Field(..., description="Unique device identifier")
-    vehicle_id: UUID = Field(..., description="Unique vehicle identifier (same as device_id)")
-    provider_id: str = Field(..., description="Provider identifier (UUID)")
+    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
+    vehicle_id: str = Field(..., description="Unique vehicle identifier")
     vehicle_type: VehicleType = Field(VehicleType.DELIVERY_ROBOT, description="Vehicle type")
-    propulsion_types: List[PropulsionType] = Field([PropulsionType.ELECTRIC], description="Propulsion types")
+    propulsion_types: List[PropulsionType] = Field(..., min_items=1, description="Propulsion types")
+
+    # Optional fields per MDS 2.0 spec
+    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
     vehicle_attributes: Optional[VehicleAttributes] = Field(None, description="Vehicle-specific attributes")
     accessibility_attributes: Optional[List[AccessibilityAttributes]] = Field(None, description="Accessibility features")
+    last_reported: Optional[int] = Field(None, description="Last time vehicle reported (milliseconds)")
+
+    class Config:
+        use_enum_values = True
 
 
 class VehicleStatus(BaseModel):
-    """Vehicle status model for real-time monitoring."""
+    """Vehicle status model for real-time monitoring - MDS 2.0 compliant."""
+    # Required fields per MDS 2.0
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: str = Field(..., description="Provider identifier (UUID)")
+    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
     vehicle_state: VehicleState = Field(..., description="Current vehicle state")
-    last_vehicle_state: Optional[VehicleState] = Field(None, description="Previous vehicle state")
     last_event_time: int = Field(..., description="Timestamp of last state change (milliseconds)")
-    last_event_types: List[str] = Field(..., description="Event types that caused last state change")
+    last_event_types: List[str] = Field(..., min_items=1, description="Event types that caused last state change")
+
+    # Optional fields per MDS 2.0 spec
+    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
+    last_vehicle_state: Optional[VehicleState] = Field(None, description="Previous vehicle state")
     current_location: Optional[GeoJSONFeature] = Field(None, description="Current vehicle location")
     trip_ids: Optional[List[UUID]] = Field(None, description="Active trip IDs")
+
+    class Config:
+        use_enum_values = True
 
 
 class VehiclesResponse(MDSResponse):

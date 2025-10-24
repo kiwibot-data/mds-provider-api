@@ -195,7 +195,7 @@ class DataTransformer:
 
         return Vehicle(
             device_id=device_id,
-            vehicle_id=device_id,  # Same as device_id per MDS spec
+            vehicle_id=str(device_id),  # Convert UUID to string per MDS spec
             provider_id=settings.PROVIDER_ID_UUID,
             vehicle_type=VehicleType.DELIVERY_ROBOT,
             propulsion_types=[PropulsionType.ELECTRIC],
