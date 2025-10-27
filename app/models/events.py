@@ -2,14 +2,14 @@
 Event-related Pydantic models for MDS Provider API.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, Field, validator
 from uuid import UUID
-from datetime import datetime
 
 from app.models.common import (
-    MDSResponse, PaginationLinks, GeoJSONFeature, VehicleState, EventType
+    MDSResponse, VehicleState, EventType
 )
+from app.models.telemetry import GPS
 
 
 class Event(BaseModel):
@@ -45,8 +45,6 @@ class Event(BaseModel):
         use_enum_values = True
 
 
-# Import GPS for type hint
-from app.models.telemetry import GPS
 Event.update_forward_refs()
 
 

@@ -10,7 +10,7 @@ from datetime import datetime
 from app.models.vehicles import Vehicle, VehicleStatus, VehicleAttributes, AccessibilityAttributes
 from app.models.common import (
     VehicleState, GeoJSONFeature, GeoJSONPoint,
-    VehicleType, PropulsionType, EventType
+    EventType
 )
 from app.config import settings
 
@@ -170,23 +170,29 @@ class DataTransformer:
         # Determine robot model based on robot_id
         robot_model = self.get_robot_model_from_id(robot_id)
 
-        # Create vehicle attributes based on robot properties
+        # Create nested vehicle_attributes spec object (static capabilities/specs)
         vehicle_attributes = VehicleAttributes(
-            year=2025,  # Updated to 2025 as requested
+            year=2025,
             make="Kiwibot",
-            model=robot_model,  # Use determined model
-            color="Blue",  # Updated to blue as requested
-            equipped_cameras=4,  # Typical Kiwibot configuration
+            model=robot_model,
+            color="Blue",
+            inspection_date="2025-01-01",
+            equipped_cameras=4,
+            equipped_lighting=None,
             wheel_count=4,
-            width=0.6,  # Approximate Kiwibot dimensions
+            width=0.6,
             length=0.8,
             height=0.6,
-            weight=50,  # Approximate weight in kg
-            top_speed=1.5,  # Max speed in m/s
-            storage_capacity=30000  # 30L in cubic centimeters
+            weight=50.0,
+            top_speed=1.5,
+            storage_capacity=30000
         )
 
-        # Accessibility features
+        # Generate data_provider_id as UUID
+        from uuid import uuid5, NAMESPACE_DNS
+        data_provider_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.data_provider")
+
+        # Accessibility features as object (booleans)
         accessibility_attributes = AccessibilityAttributes(
             audio_cue=True,
             visual_cue=True,
@@ -195,13 +201,16 @@ class DataTransformer:
 
         return Vehicle(
             device_id=device_id,
-            vehicle_id=str(device_id),  # Convert UUID to string per MDS spec
-            provider_id=settings.PROVIDER_ID_UUID,
-            vehicle_type=VehicleType.DELIVERY_ROBOT,
-            propulsion_types=[PropulsionType.ELECTRIC],
-            data_provider_id="kiwibot-delivery-robots",
+            vehicle_id=str(device_id),
+            provider_id=settings.PROVIDER_ID,  # string provider id
+            vehicle_type="robot",
+            propulsion_types=["electric"],
+            year=2025,
+            mfgr="Kiwibot",
+            model=robot_model,
             vehicle_attributes=vehicle_attributes,
-            accessibility_attributes=[accessibility_attributes]  # Make it a list
+            accessibility_attributes=accessibility_attributes,
+            data_provider_id=data_provider_id
         )
 
     def transform_location_to_vehicle_status(
@@ -251,20 +260,63 @@ class DataTransformer:
         if trip_data:
             trip_ids = [self._generate_trip_id(trip) for trip in trip_data]
 
-        # Generate last_event and last_telemetry IDs
+        # Generate data_provider_id as UUID
         from uuid import uuid5, NAMESPACE_DNS
+        data_provider_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.data_provider")
+
+        # Create last_event and last_telemetry objects
         last_event_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.event.{robot_id}.{last_event_time}")
         last_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{robot_id}.{last_event_time}")
+        
+        # Create GPS location object for event/telemetry
+        from app.models.telemetry import GPS
+        # Always create GPS object with valid coordinates (use default if missing)
+        default_lat = 38.9197 if lat is None else lat
+        default_lng = -77.0218 if lng is None else lng
+        gps_location = GPS(
+            lat=round(default_lat, 7),
+            lng=round(default_lng, 7),
+            horizontal_accuracy=5.0
+        )
+        
+        # Create full Event object
+        from app.models.events import Event
+        from app.models.common import EventType
+        last_event_obj = Event(
+            event_id=last_event_id,
+            provider_id=UUID(settings.PROVIDER_ID_UUID),
+            device_id=device_id,
+            event_types=[EventType.LOCATED],  # Use proper enum
+            vehicle_state=vehicle_state,
+            timestamp=last_event_time,
+            location=gps_location,
+            data_provider_id=data_provider_id
+        )
+        
+        # Create full Telemetry object
+        from app.models.telemetry import Telemetry
+        journey_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.journey.{robot_id}")
+        last_telemetry_obj = Telemetry(
+            provider_id=UUID(settings.PROVIDER_ID_UUID),
+            device_id=device_id,
+            telemetry_id=last_telemetry_id,
+            timestamp=last_event_time,
+            trip_ids=trip_ids if trip_ids else [uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.trip.{robot_id}")],
+            journey_id=journey_id,
+            location=gps_location,
+            data_provider_id=data_provider_id
+        )
 
+        # Serialize nested objects to dicts as VehicleStatus expects Dict fields
         return VehicleStatus(
             device_id=device_id,
-            provider_id=settings.PROVIDER_ID_UUID,
+            provider_id=settings.PROVIDER_ID,
             vehicle_state=vehicle_state,
             last_event_time=last_event_time,
             last_event_types=last_event_types,
-            last_event=last_event_id,
-            last_telemetry=last_telemetry_id,
-            data_provider_id="kiwibot-delivery-robots",
+            last_event=last_event_obj.model_dump(),
+            last_telemetry=last_telemetry_obj.model_dump(),
+            data_provider_id=data_provider_id,
             current_location=current_location,
             trip_ids=trip_ids if trip_ids else None
         )

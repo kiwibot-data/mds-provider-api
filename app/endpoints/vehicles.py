@@ -90,7 +90,7 @@ async def get_vehicle_status(
             vehicles_status=vehicle_statuses,
             last_updated=current_time,
             ttl=ttl,
-            links={"self": "/vehicles/status"}
+            links={"next": "https://mds-provider-api-862961741611.us-central1.run.app/vehicles/status"}
         )
 
     except HTTPException:
@@ -177,7 +177,7 @@ async def get_vehicles(
             vehicles=vehicles,
             last_updated=current_time,
             ttl=ttl,
-            links=[{"rel": "self", "href": "/vehicles/"}]
+            links=[{"rel": "self", "href": "https://mds-provider-api-862961741611.us-central1.run.app/vehicles/"}]
         )
 
     except HTTPException:

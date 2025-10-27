@@ -8,49 +8,60 @@ from uuid import UUID
 from datetime import datetime
 
 from app.models.common import (
-    MDSResponse, PaginationLinks, GeoJSONFeature, VehicleState,
-    VehicleType, PropulsionType
+    MDSResponse, PaginationLinks, GeoJSONFeature, VehicleState
 )
 
 
 class VehicleAttributes(BaseModel):
-    """Vehicle attributes specific to delivery robots."""
+    """Relatively static vehicle specification attributes (nested object)."""
     year: Optional[int] = Field(None, description="Year of manufacture")
-    make: Optional[str] = Field(None, description="Vehicle manufacturer")
-    model: Optional[str] = Field(None, description="Vehicle model")
+    make: Optional[str] = Field(None, description="Manufacturer name")
+    model: Optional[str] = Field(None, description="Model name")
     color: Optional[str] = Field(None, description="Vehicle color")
     inspection_date: Optional[str] = Field(None, description="Date of last inspection (YYYY-MM-DD)")
-    equipped_cameras: Optional[int] = Field(None, description="Number of cameras on device")
-    equipped_lighting: Optional[int] = Field(None, description="Number of lights on device")
+    equipped_cameras: Optional[int] = Field(None, description="Number of cameras equipped")
+    equipped_lighting: Optional[str] = Field(None, description="Lighting configuration")
     wheel_count: Optional[int] = Field(None, description="Number of wheels")
-    width: Optional[float] = Field(None, description="Width in meters")
-    length: Optional[float] = Field(None, description="Length in meters")
-    height: Optional[float] = Field(None, description="Height in meters")
-    weight: Optional[float] = Field(None, description="Weight in kilograms")
-    top_speed: Optional[float] = Field(None, description="Top speed in meters per second")
-    storage_capacity: Optional[int] = Field(None, description="Cargo space in cubic centimeters")
+    width: Optional[float] = Field(None, description="Vehicle width in meters")
+    length: Optional[float] = Field(None, description="Vehicle length in meters")
+    height: Optional[float] = Field(None, description="Vehicle height in meters")
+    weight: Optional[float] = Field(None, description="Vehicle weight in kilograms")
+    top_speed: Optional[float] = Field(None, description="Top speed in meters/second")
+    storage_capacity: Optional[int] = Field(None, description="Storage capacity in cubic centimeters (cc)")
+
+    class Config:
+        extra = "forbid"
 
 
 class AccessibilityAttributes(BaseModel):
-    """Accessibility attributes for delivery robots."""
-    audio_cue: Optional[bool] = Field(None, description="Has audio cues upon delivery")
-    visual_cue: Optional[bool] = Field(None, description="Has visual cues upon delivery")
-    remote_open: Optional[bool] = Field(None, description="Can door be remotely opened")
+    """Accessibility features object (was previously incorrectly modeled as an array)."""
+    audio_cue: Optional[bool] = Field(None, description="Provides audio cues")
+    visual_cue: Optional[bool] = Field(None, description="Provides visual cues")
+    remote_open: Optional[bool] = Field(None, description="Remote compartment opening supported")
 
 
 class Vehicle(BaseModel):
-    """Vehicle information model - MDS 2.0 compliant."""
-    # Required fields per MDS 2.0
+    """Vehicle information model - updated for MDS 2.0 compliance (delivery robots)."""
+    # Core identity
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
-    vehicle_id: str = Field(..., description="Unique vehicle identifier")
-    vehicle_type: VehicleType = Field(VehicleType.DELIVERY_ROBOT, description="Vehicle type")
-    propulsion_types: List[PropulsionType] = Field(..., min_items=1, description="Propulsion types")
+    provider_id: str = Field(..., description="Provider identifier (string per spec)")
+    vehicle_id: Optional[str] = Field(None, description="Internal vehicle identifier (optional)")
 
-    # Optional fields per MDS 2.0 spec
-    data_provider_id: Optional[str] = Field(None, description="Optional data provider identifier")
-    vehicle_attributes: Optional[VehicleAttributes] = Field(None, description="Vehicle-specific attributes")
-    accessibility_attributes: Optional[List[AccessibilityAttributes]] = Field(None, description="Accessibility features")
+    # Classification
+    vehicle_type: str = Field("robot", description="Vehicle type (MDS delivery robot)")
+    propulsion_types: List[str] = Field(..., min_items=1, description="Propulsion types (e.g. electric)")
+
+    # Top‑level descriptive attributes (moved out of vehicle_attributes per spec example)
+    year: Optional[int] = Field(None, description="Year of manufacture")
+    mfgr: Optional[str] = Field(None, description="Manufacturer name")
+    model: Optional[str] = Field(None, description="Model name")
+
+    # Nested attribute objects
+    vehicle_attributes: Optional[VehicleAttributes] = Field(None, description="Extended vehicle specification attributes")
+    accessibility_attributes: Optional[AccessibilityAttributes] = Field(None, description="Accessibility feature flags")
+
+    # Optional metadata
+    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
     last_reported: Optional[int] = Field(None, description="Last time vehicle reported (milliseconds)")
 
     class Config:
@@ -61,15 +72,15 @@ class VehicleStatus(BaseModel):
     """Vehicle status model for real-time monitoring - MDS 2.0 compliant."""
     # Required fields per MDS 2.0
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
+    provider_id: str = Field(..., description="Provider identifier (string)")
     vehicle_state: VehicleState = Field(..., description="Current vehicle state")
     last_event_time: int = Field(..., description="Timestamp of last state change (milliseconds)")
     last_event_types: List[str] = Field(..., min_items=1, description="Event types that caused last state change")
-    last_event: Optional[UUID] = Field(None, description="Last event identifier")
-    last_telemetry: Optional[UUID] = Field(None, description="Last telemetry identifier")
+    last_event: Optional[Dict[str, Any]] = Field(None, description="Last event object")
+    last_telemetry: Optional[Dict[str, Any]] = Field(None, description="Last telemetry object")
 
     # Optional fields per MDS 2.0 spec
-    data_provider_id: Optional[str] = Field(None, description="Optional data provider identifier")
+    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
     last_vehicle_state: Optional[VehicleState] = Field(None, description="Previous vehicle state")
     current_location: Optional[GeoJSONFeature] = Field(None, description="Current vehicle location")
     trip_ids: Optional[List[UUID]] = Field(None, description="Active trip IDs")
