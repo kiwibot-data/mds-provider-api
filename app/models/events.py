@@ -16,19 +16,19 @@ class Event(BaseModel):
     """Event model for delivery robot state changes - MDS 2.0 compliant."""
     # Required fields
     event_id: UUID = Field(..., description="Unique event identifier")
-    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
+    provider_id: str = Field(..., description="Provider identifier string")
     device_id: UUID = Field(..., description="Unique device identifier")
     event_types: List[EventType] = Field(..., min_items=1, description="Event types that occurred")
     vehicle_state: VehicleState = Field(..., description="Vehicle state after the event")
     timestamp: int = Field(..., description="When the event occurred (milliseconds since epoch)")
 
     # Optional fields per MDS 2.0 spec
-    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
+    data_provider_id: Optional[str] = Field(None, description="Optional data provider identifier")
     publication_time: Optional[int] = Field(None, description="When event was published (milliseconds)")
     location: Optional["GPS"] = Field(None, description="GPS location where event occurred")
     event_geographies: Optional[List[UUID]] = Field(None, description="Geography UUIDs where event occurred")
     battery_pct: Optional[float] = Field(None, ge=0, le=100, description="Battery percentage 0-100")
-    fuel_percent: Optional[float] = Field(None, ge=0, le=100, description="Fuel percentage 0-100")
+    fuel_percent: Optional[int] = Field(None, ge=0, le=100, description="Fuel percentage 0-100 (integer)")
     trip_ids: Optional[List[UUID]] = Field(None, description="Associated trip IDs if applicable")
     associated_ticket: Optional[str] = Field(None, description="Associated support ticket")
 
@@ -42,7 +42,7 @@ class Event(BaseModel):
         return v
 
     class Config:
-        use_enum_values = True
+        arbitrary_types_allowed = True
 
 
 Event.update_forward_refs()

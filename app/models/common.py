@@ -4,10 +4,10 @@ Common Pydantic models for MDS Provider API.
 
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, validator
-from uuid import UUID
 from datetime import datetime
 from enum import Enum
-from app.config import MDSConstants
+
+from app.config import settings
 
 
 class GeoJSONPoint(BaseModel):
@@ -133,7 +133,7 @@ class PaginationLinks(BaseModel):
 
 class MDSResponse(BaseModel):
     """Base MDS response model."""
-    version: str = Field("2.0.0", description="MDS version")
+    version: str = Field(settings.MDS_VERSION, description="MDS version")
 
     class Config:
         json_encoders = {

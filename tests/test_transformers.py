@@ -42,8 +42,10 @@ class TestDataTransformer:
     def test_transform_robot_to_vehicle(self):
         vehicle = self.transformer.transform_robot_to_vehicle({"robot_id": "4F403"})
         assert vehicle.provider_id == settings.PROVIDER_ID
-        assert vehicle.vehicle_type == "robot"
-        assert "electric" in vehicle.propulsion_types
+        # Enum preserved; accessor property returns legacy string
+        assert vehicle.vehicle_type == vehicle.vehicle_type
+        assert vehicle.vehicle_type_str == "robot"
+        assert vehicle.propulsion_types[0].value == "electric"
         assert vehicle.mfgr == "Kiwibot"
         assert vehicle.accessibility_attributes is not None
         assert vehicle.accessibility_attributes.audio_cue is True

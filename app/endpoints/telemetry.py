@@ -140,7 +140,7 @@ async def get_telemetry(
                     start_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{device_id}.{start_time_ms}")
 
                     start_telemetry = Telemetry(
-                        provider_id=settings.PROVIDER_ID_UUID,
+                        provider_id=settings.PROVIDER_ID,
                         device_id=device_id,
                         telemetry_id=start_telemetry_id,
                         timestamp=start_time_ms,
@@ -163,7 +163,7 @@ async def get_telemetry(
                     end_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{device_id}.{end_time_ms}")
 
                     end_telemetry = Telemetry(
-                        provider_id=settings.PROVIDER_ID_UUID,
+                        provider_id=settings.PROVIDER_ID,
                         device_id=device_id,
                         telemetry_id=end_telemetry_id,
                         timestamp=end_time_ms,

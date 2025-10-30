@@ -2,13 +2,13 @@
 Pytest configuration and fixtures for MDS Provider API tests.
 """
 
-import pytest
 import asyncio
-from typing import AsyncGenerator, Dict, Any
+import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock, patch
-import jwt
+from typing import Generator
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timedelta
+import jwt
 
 from app.main import app
 from app.config import settings
@@ -52,35 +52,47 @@ def auth_headers(mock_jwt_token):
     return {"Authorization": mock_jwt_token}
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def mock_bigquery_service():
-    """Mock BigQuery service for testing."""
-    with patch("app.services.bigquery.bigquery_service") as mock_service:
-        # Configure mock methods
-        mock_service.get_active_robot_list = AsyncMock(return_value=["4F403", "4E006"])
-        mock_service.get_robot_current_status = AsyncMock(return_value=[
+    """Fixture to mock the BigQuery service."""
+    with patch("app.services.bigquery.bigquery_service", new_callable=AsyncMock) as mock_service:
+        
+        # Configure mock for vehicles endpoint
+        mock_service.get_active_robot_list.return_value = [
+            {"robot_id": "4F403"},
+            {"robot_id": "4E006"}
+        ]
+        mock_service.get_robot_current_status.return_value = [
+            {"robot_id": "4F403", "latitude": 1.0, "longitude": 2.0, "timestamp": datetime.utcnow()},
+            {"robot_id": "4E006", "latitude": 3.0, "longitude": 4.0, "timestamp": datetime.utcnow()}
+        ]
+        mock_service.get_robot_location_data.return_value = {
+            "robot_id": "4F403", "latitude": 1.0, "longitude": 2.0, "timestamp": datetime.utcnow()
+        }
+        mock_service.get_robot_locations.return_value = [
+            {"robot_id": "4F403", "latitude": 1.0, "longitude": 2.0, "timestamp": datetime.utcnow()},
+            {"robot_id": "4E006", "latitude": 3.0, "longitude": 4.0, "timestamp": datetime.utcnow()}
+        ]
+
+        # Configure mock for trips endpoint
+        mock_service.get_robot_trips.return_value = [
             {
                 "robot_id": "4F403",
-                "latitude": 37.7749,
-                "longitude": -122.4194,
-                "timestamp": datetime.utcnow(),
-                "accuracy": 0.8
-            }
-        ])
-        mock_service.get_robot_trips = AsyncMock(return_value=[
-            {
-                "robot_id": "4F403",
-                "job_id": "test-job-123",
                 "trip_start": datetime.utcnow() - timedelta(hours=1),
                 "trip_end": datetime.utcnow(),
                 "trip_duration_seconds": 3600,
-                "start_latitude": 37.7749,
-                "start_longitude": -122.4194
+                "trip_distance_meters": 1500,
+                "start_latitude": 1.0, "start_longitude": 2.0,
+                "end_latitude": 1.1, "end_longitude": 2.1
             }
-        ])
-        mock_service.check_data_availability = AsyncMock(return_value=True)
+        ]
+        mock_service.check_data_availability.return_value = True
 
-        yield mock_service
+        # Yield a dictionary of mocks to access them in tests
+        yield {
+            "vehicles": mock_service,
+            "trips": mock_service
+        }
 
 
 @pytest.fixture

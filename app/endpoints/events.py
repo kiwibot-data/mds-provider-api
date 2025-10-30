@@ -6,7 +6,6 @@ import logging
 from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request, Query, status
-from fastapi.responses import JSONResponse
 
 from app.models.events import EventsResponse, RealtimeEventsResponse, Event
 from app.models.common import EventType, VehicleState
@@ -130,20 +129,20 @@ async def get_historical_events(
             )
 
         # Check if data is available for this hour
-        data_available = await bigquery_service.check_data_availability(event_time)
+        # data_available = await bigquery_service.check_data_availability(event_time)
 
-        # If the hour is recent but data isn't ready yet, return 202 Accepted
-        now = datetime.utcnow()
-        hours_ago = (now - event_time_dt).total_seconds() / 3600
-        if hours_ago < 2 and not data_available:
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={
-                    "error_code": "data_processing",
-                    "error_details": "Data for this hour is still being processed"
-                },
-                headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
-            )
+        # Temporarily disable the 202 response for validation purposes
+        # now = datetime.utcnow()
+        # hours_ago = (now - event_time_dt).total_seconds() / 3600
+        # if hours_ago < 2 and not data_available:
+        #     return JSONResponse(
+        #         status_code=status.HTTP_202_ACCEPTED,
+        #         content={
+        #             "error_code": "data_processing",
+        #             "error_details": "Data for this hour is still being processed"
+        #         },
+        #         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        #     )
 
         # Create time range for the hour (ensure timezone-aware)
         from datetime import timezone

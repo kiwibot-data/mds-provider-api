@@ -194,13 +194,6 @@ class BigQueryService:
         Returns:
             List of current robot status records
         """
-        # Use the specific robot IDs from the sample query
-        default_robots = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
-        # Query pre-computed vehicles table for current status
         query = f"""
         SELECT
             robot_id,
@@ -212,50 +205,54 @@ class BigQueryService:
             battery_level,
             last_updated
         FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
-        WHERE 1=1
         """
 
-        # Add robot ID filter
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
-        else:
-            # Use default robot list
-            robot_ids_str = "', '".join(default_robots)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
+            query += f" WHERE robot_id IN ('{robot_ids_str}')"
 
         query += " ORDER BY last_updated DESC"
 
         return await self._run_query_async(query)
 
-    async def get_active_robot_list(self) -> List[str]:
+    async def get_active_robot_list(self) -> List[Dict[str, Any]]:
         """
-        Get list of currently active robot IDs from the specific robot list.
+        Get list of currently active robot data from the specific robot list.
 
         Returns:
-            List of robot IDs that have recent activity
+            List of robot data dictionaries for robots with recent activity
         """
-        # Use the specific robot IDs from the sample query
         robot_ids = [
             '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
             '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
         ]
         
-        # Check which robots have recent activity
         cutoff_date = datetime.utcnow() - timedelta(days=settings.VEHICLE_RETENTION_DAYS)
         robot_ids_str = "', '".join(robot_ids)
         
         query = f"""
-        SELECT DISTINCT robot_id
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_LOCATIONS}.{settings.BIGQUERY_TABLE_LOCATIONS}`
-        WHERE robot_id IN ('{robot_ids_str}')
-        AND date >= '{cutoff_date.strftime('%Y-%m-%d')}'
-        AND accuracy > {settings.MIN_LOCATION_ACCURACY}
-        ORDER BY robot_id
+        SELECT
+            t1.robot_id,
+            t1.latitude,
+            t1.longitude,
+            t1.timestamp,
+            t1.accuracy,
+            t1.status,
+            t1.battery_level,
+            t1.last_updated
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}` AS t1
+        INNER JOIN (
+            SELECT robot_id, MAX(last_updated) as max_last_updated
+            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+            WHERE robot_id IN ('{robot_ids_str}')
+            AND last_updated >= '{cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}'
+            GROUP BY robot_id
+        ) AS t2 ON t1.robot_id = t2.robot_id AND t1.last_updated = t2.max_last_updated
+        WHERE t1.robot_id IN ('{robot_ids_str}')
         """
 
         results = await self._run_query_async(query)
-        return [row['robot_id'] for row in results]
+        return results
 
     async def get_robot_events(
         self,
@@ -411,3 +408,39 @@ class BigQueryService:
 
 # Global BigQuery service instance
 bigquery_service = BigQueryService()
+
+
+async def get_all_robots() -> List[Dict[str, Any]]:
+    """
+    Get all active robots.
+    """
+    return await bigquery_service.get_active_robot_list()
+
+
+async def get_robot_by_id(robot_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a single robot by its ID.
+    """
+    # This should return the latest status record for the given robot_id
+    query = f"""
+    SELECT
+        t1.robot_id,
+        t1.latitude,
+        t1.longitude,
+        t1.timestamp,
+        t1.accuracy,
+        t1.status,
+        t1.battery_level,
+        t1.last_updated
+    FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}` AS t1
+    INNER JOIN (
+        SELECT robot_id, MAX(last_updated) as max_last_updated
+        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        WHERE robot_id = '{robot_id}'
+        GROUP BY robot_id
+    ) AS t2 ON t1.robot_id = t2.robot_id AND t1.last_updated = t2.max_last_updated
+    WHERE t1.robot_id = '{robot_id}'
+    LIMIT 1
+    """
+    results = await bigquery_service._run_query_async(query)
+    return results[0] if results else None

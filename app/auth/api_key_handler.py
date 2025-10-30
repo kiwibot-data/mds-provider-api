@@ -3,11 +3,9 @@ API Key authentication handler for MDS Provider API.
 Provides simple API key-based authentication as an alternative to Auth0.
 """
 
-import hashlib
 import secrets
-from typing import Dict, Optional, Set
+from typing import Dict
 from fastapi import HTTPException, status
-from app.config import settings
 
 
 class APIKeyHandler:
@@ -20,9 +18,25 @@ class APIKeyHandler:
         self.key_prefix = "mds_"
 
     def _load_api_keys(self) -> Dict[str, Dict]:
-        """Load API keys from environment variables."""
-        # In production, load from secure database
-        api_keys = {}
+        """Load API keys from environment variables and include defaults for local dev."""
+        api_keys = {
+            # Default test keys for local development and validation
+            "mds_test_key_12345": {
+                "provider_id": "test-provider-1",
+                "permissions": ["read"],
+                "active": True
+            },
+            "mds_demo_key_67890": {
+                "provider_id": "test-provider-2",
+                "permissions": ["read"],
+                "active": True
+            },
+            "mds_washington_ddot_2024": {
+                "provider_id": "washingtonddot",
+                "permissions": ["read"],
+                "active": True
+            }
+        }
         
         # Load from environment variables (format: API_KEY_PROVIDER=key:provider:permissions)
         import os
@@ -30,18 +44,13 @@ class APIKeyHandler:
             if env_var.startswith("API_KEY_") and ":" in value:
                 try:
                     key, provider, permissions_str = value.split(":", 2)
-                    # Handle both comma-separated and underscore-separated permissions
-                    if "," in permissions_str:
-                        permissions = permissions_str.split(",")
-                    else:
-                        permissions = permissions_str.split("_")
+                    permissions = permissions_str.split(",")
                     api_keys[key] = {
                         "provider_id": provider,
                         "permissions": permissions,
                         "active": True
                     }
                 except ValueError:
-                    # Fallback to simple format
                     if ":" in value:
                         key, provider = value.split(":", 1)
                         api_keys[key] = {

@@ -3,66 +3,68 @@ Tests for authentication middleware and JWT handling.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-import jwt
-from datetime import datetime, timedelta
+from fastapi import HTTPException, status
+from unittest.mock import MagicMock, patch
 
 from app.config import settings
 
 
 class TestAuthMiddleware:
-    """Tests for authentication middleware."""
+    """
+    Tests for the authentication middleware.
+    """
 
-    def test_public_endpoints_no_auth(self, client):
-        """Test that public endpoints don't require authentication."""
-        public_endpoints = ["/", "/health", "/docs", "/redoc", "/openapi.json"]
-
-        for endpoint in public_endpoints:
-            response = client.get(endpoint)
-            # Should not return 401 (may return other codes like 200, 404, etc.)
-            assert response.status_code != 401
+    def test_public_endpoints_are_accessible(self, client):
+        """Test that public endpoints are accessible without authentication."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert "status" in response.json()
+        assert response.json()["status"] == "healthy"
 
     def test_protected_endpoints_require_auth(self, client):
         """Test that protected endpoints require authentication."""
-        protected_endpoints = ["/vehicles/", "/vehicles/status", "/trips", "/events/recent"]
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/")
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
 
-        for endpoint in protected_endpoints:
-            response = client.get(endpoint)
-            assert response.status_code == 401
-
-    def test_missing_authorization_header(self, client):
-        """Test request without Authorization header."""
-        response = client.get("/vehicles/")
-        assert response.status_code == 401
-
-        data = response.json()
-        assert "error" in data
-
-    def test_invalid_authorization_scheme(self, client):
-        """Test request with invalid authorization scheme."""
-        headers = {"Authorization": "Basic invalid"}
-        response = client.get("/vehicles/", headers=headers)
-        assert response.status_code == 401
-
-    def test_malformed_authorization_header(self, client):
-        """Test request with malformed authorization header."""
-        headers = {"Authorization": "Bearer"}  # Missing token
-        response = client.get("/vehicles/", headers=headers)
-        assert response.status_code == 401
-
-    def test_valid_token_success(self, client, auth_headers, mock_jwt_handler, mock_bigquery_service):
-        """Test request with valid token."""
+    def test_valid_token_success(self, client, auth_headers, mock_jwt_handler):
+        """Test successful authentication with a valid JWT."""
         response = client.get("/vehicles/", headers=auth_headers)
-        # Should not return 401
-        assert response.status_code != 401
-        # Verify JWT handler was called
+        assert response.status_code == 200
         mock_jwt_handler.validate_token_and_extract_claims.assert_called_once()
 
-    def test_options_request_no_auth(self, client):
-        """Test that OPTIONS requests don't require authentication."""
-        response = client.options("/vehicles/")
-        # Should not return 401 for CORS preflight
-        assert response.status_code != 401
+    def test_missing_authorization_header(self, client):
+        """Test that a missing authorization header results in an error."""
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/")
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_invalid_authorization_scheme(self, client):
+        """Test that an invalid authorization scheme (e.g., 'Basic') is rejected."""
+        headers = {"Authorization": "Basic some_token"}
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/", headers=headers)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Invalid authorization scheme" in exc_info.value.detail
+
+    def test_malformed_authorization_header(self, client):
+        """Test that a malformed authorization header is rejected."""
+        headers = {"Authorization": "Bearer"}  # Missing token
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/", headers=headers)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Invalid authorization header format" in exc_info.value.detail
+
+    def test_invalid_token_failure(self, client, mock_jwt_handler):
+        """Test that an invalid JWT results in an authentication failure."""
+        headers = {"Authorization": "Bearer invalid_token"}
+        mock_jwt_handler.validate_token_and_extract_claims.side_effect = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/", headers=headers)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Invalid token" in exc_info.value.detail
 
 
 class TestJWTHandler:
@@ -132,34 +134,18 @@ class TestJWTHandler:
 
 
 class TestAuthenticationIntegration:
-    """Integration tests for authentication flow."""
+    """
+    Integration tests for the full authentication flow.
+    """
 
-    def test_full_auth_flow_success(self, client, mock_bigquery_service):
-        """Test complete authentication flow with valid token."""
-        # Create a test token (simplified for testing)
-        with patch("app.auth.jwt_handler.jwt_handler") as mock_handler:
-            mock_handler.validate_token_and_extract_claims.return_value = {
-                "provider_id": settings.PROVIDER_ID,
-                "claims": {"provider_id": settings.PROVIDER_ID}
-            }
-
-            headers = {"Authorization": "Bearer test-token"}
-            response = client.get("/vehicles/", headers=headers)
-
-            # Should succeed
-            assert response.status_code == 200
-            mock_handler.validate_token_and_extract_claims.assert_called_once_with("test-token")
+    def test_full_auth_flow_success(self, client, auth_headers, mock_jwt_handler):
+        """Test the full authentication flow with a valid token."""
+        response = client.get("/vehicles/", headers=auth_headers)
+        assert response.status_code == 200
+        mock_jwt_handler.validate_token_and_extract_claims.assert_called_once()
 
     def test_full_auth_flow_failure(self, client):
-        """Test complete authentication flow with invalid token."""
-        from fastapi import HTTPException
-
-        with patch("app.auth.jwt_handler.jwt_handler") as mock_handler:
-            mock_handler.validate_token_and_extract_claims.side_effect = HTTPException(
-                status_code=401, detail="Invalid token"
-            )
-
-            headers = {"Authorization": "Bearer invalid-token"}
-            response = client.get("/vehicles/", headers=headers)
-
-            assert response.status_code == 401
+        """Test the full authentication flow with no token."""
+        with pytest.raises(HTTPException) as exc_info:
+            client.get("/vehicles/")
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED

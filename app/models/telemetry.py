@@ -51,7 +51,7 @@ class GPS(BaseModel):
 class Telemetry(BaseModel):
     """Telemetry model for vehicle GPS data - MDS 2.0 compliant."""
     # Required fields per MDS 2.0 spec
-    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
+    provider_id: str = Field(..., description="Provider identifier string")
     device_id: UUID = Field(..., description="Unique device identifier")
     telemetry_id: UUID = Field(..., description="Unique telemetry point identifier")
     timestamp: int = Field(..., description="Timestamp when GPS data was recorded (milliseconds since epoch)")
@@ -60,7 +60,7 @@ class Telemetry(BaseModel):
     location: GPS = Field(..., description="GPS coordinates and metadata")
 
     # Optional fields per MDS 2.0 spec
-    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
+    data_provider_id: Optional[str] = Field(None, description="Optional data provider identifier")
     stop_id: Optional[UUID] = Field(None, description="Stop identifier if at a stop")
     location_type: Optional[str] = Field(None, description="Type of location (street, sidewalk, crosswalk, garage, bike_lane)")
     battery_percent: Optional[int] = Field(None, ge=0, le=100, description="Battery percentage 0-100")
@@ -76,7 +76,7 @@ class Telemetry(BaseModel):
         return v
 
     class Config:
-        use_enum_values = True
+        arbitrary_types_allowed = True
 
 
 class TelemetryResponse(MDSResponse):

@@ -2,10 +2,9 @@
 Trip-related Pydantic models for MDS Provider API.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from uuid import UUID
-from datetime import datetime
 
 from app.models.common import (
     MDSResponse, GeoJSONFeature, TripType, DriverType
@@ -35,9 +34,9 @@ class FareAttributes(BaseModel):
 
 
 class Trip(BaseModel):
-    """Trip model for delivery robots - MDS 2.0 compliant."""
+    """Trip model for delivery robots - MDS 2.0 compliant (provider_id serialized as string for external validator)."""
     # Required fields per MDS 2.0
-    provider_id: UUID = Field(..., description="Provider identifier (UUID)")
+    provider_id: str = Field(..., description="Provider identifier string")
     device_id: UUID = Field(..., description="Unique device identifier")
     trip_id: UUID = Field(..., description="Unique trip identifier")
     duration: int = Field(..., ge=0, description="Trip duration in seconds")

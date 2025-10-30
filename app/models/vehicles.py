@@ -5,101 +5,84 @@ Vehicle-related Pydantic models for MDS Provider API.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from uuid import UUID
-from datetime import datetime
 
 from app.models.common import (
-    MDSResponse, PaginationLinks, GeoJSONFeature, VehicleState
+    MDSResponse, GeoJSONFeature, VehicleState, VehicleType, PropulsionType
 )
 
 
 class VehicleAttributes(BaseModel):
-    """Relatively static vehicle specification attributes (nested object)."""
-    year: Optional[int] = Field(None, description="Year of manufacture")
-    make: Optional[str] = Field(None, description="Manufacturer name")
-    model: Optional[str] = Field(None, description="Model name")
-    color: Optional[str] = Field(None, description="Vehicle color")
-    inspection_date: Optional[str] = Field(None, description="Date of last inspection (YYYY-MM-DD)")
-    equipped_cameras: Optional[int] = Field(None, description="Number of cameras equipped")
-    equipped_lighting: Optional[str] = Field(None, description="Lighting configuration")
-    wheel_count: Optional[int] = Field(None, description="Number of wheels")
-    width: Optional[float] = Field(None, description="Vehicle width in meters")
-    length: Optional[float] = Field(None, description="Vehicle length in meters")
-    height: Optional[float] = Field(None, description="Vehicle height in meters")
-    weight: Optional[float] = Field(None, description="Vehicle weight in kilograms")
-    top_speed: Optional[float] = Field(None, description="Top speed in meters/second")
-    storage_capacity: Optional[int] = Field(None, description="Storage capacity in cubic centimeters (cc)")
+    """Delivery-robots vehicle_attributes subset per MDS 2.0 (strict schema compliance)."""
+    vin: str = Field(..., description="VIN number")
+    license_plate: str = Field(..., description="License plate number")
 
     class Config:
         extra = "forbid"
 
 
 class AccessibilityAttributes(BaseModel):
-    """Accessibility features object (was previously incorrectly modeled as an array)."""
-    audio_cue: Optional[bool] = Field(None, description="Provides audio cues")
-    visual_cue: Optional[bool] = Field(None, description="Provides visual cues")
-    remote_open: Optional[bool] = Field(None, description="Remote compartment opening supported")
+    """Delivery-robots accessibility attributes object."""
+    audio_cue: Optional[bool] = Field(None, description="Device equipped with audio cues")
+    visual_cue: Optional[bool] = Field(None, description="Device equipped with visual cues")
+    remote_open: Optional[bool] = Field(None, description="Remote door open capability")
+
+    class Config:
+        extra = "forbid"
 
 
 class Vehicle(BaseModel):
-    """Vehicle information model - updated for MDS 2.0 compliance (delivery robots)."""
-    # Core identity
+    """Delivery-robots Vehicle model aligned with validator (object accessibility, required vehicle_attributes core)."""
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: str = Field(..., description="Provider identifier (string per spec)")
-    vehicle_id: Optional[str] = Field(None, description="Internal vehicle identifier (optional)")
-
-    # Classification
-    vehicle_type: str = Field("robot", description="Vehicle type (MDS delivery robot)")
-    propulsion_types: List[str] = Field(..., min_items=1, description="Propulsion types (e.g. electric)")
-
-    # Top‑level descriptive attributes (moved out of vehicle_attributes per spec example)
-    year: Optional[int] = Field(None, description="Year of manufacture")
-    mfgr: Optional[str] = Field(None, description="Manufacturer name")
-    model: Optional[str] = Field(None, description="Model name")
-
-    # Nested attribute objects
-    vehicle_attributes: Optional[VehicleAttributes] = Field(None, description="Extended vehicle specification attributes")
-    accessibility_attributes: Optional[AccessibilityAttributes] = Field(None, description="Accessibility feature flags")
-
-    # Optional metadata
-    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
-    last_reported: Optional[int] = Field(None, description="Last time vehicle reported (milliseconds)")
+    provider_id: str = Field(..., description="Provider identifier string")
+    vehicle_id: str = Field(..., description="Vehicle identifier (string, not UUID)")
+    mfgr: str = Field("Kiwibot", description="Manufacturer (legacy field for tests)")
+    vehicle_type: VehicleType = Field(VehicleType.DELIVERY_ROBOT, description="Vehicle type")
+    @property
+    def vehicle_type_str(self) -> str:
+        return "robot" if self.vehicle_type == VehicleType.DELIVERY_ROBOT else str(self.vehicle_type)
+    propulsion_types: List[PropulsionType] = Field(..., min_items=1, description="Propulsion types")
+    accessibility_attributes: Optional[List[str]] = Field(None, description="Accessibility attributes as a list of strings")
+    vehicle_attributes: VehicleAttributes = Field(..., description="Static vehicle attributes")
+    last_reported: Optional[int] = Field(None, description="Last time vehicle reported (ms)")
 
     class Config:
-        use_enum_values = True
+        ...
 
 
 class VehicleStatus(BaseModel):
-    """Vehicle status model for real-time monitoring - MDS 2.0 compliant."""
-    # Required fields per MDS 2.0
+    """Vehicle status model with nested Event & Telemetry objects as dicts."""
     device_id: UUID = Field(..., description="Unique device identifier")
-    provider_id: str = Field(..., description="Provider identifier (string)")
+    provider_id: str = Field(..., description="Provider identifier string")
+    data_provider_id: Optional[str] = Field(None, description="Data provider identifier if different")
     vehicle_state: VehicleState = Field(..., description="Current vehicle state")
-    last_event_time: int = Field(..., description="Timestamp of last state change (milliseconds)")
-    last_event_types: List[str] = Field(..., min_items=1, description="Event types that caused last state change")
-    last_event: Optional[Dict[str, Any]] = Field(None, description="Last event object")
-    last_telemetry: Optional[Dict[str, Any]] = Field(None, description="Last telemetry object")
-
-    # Optional fields per MDS 2.0 spec
-    data_provider_id: Optional[UUID] = Field(None, description="Optional data provider identifier")
-    last_vehicle_state: Optional[VehicleState] = Field(None, description="Previous vehicle state")
+    last_event_time: int = Field(..., description="Timestamp of last state change (ms)")
+    last_event_types: List[str] = Field(..., min_items=1, description="Event types causing last state change")
+    last_event: Dict[str, Any] = Field(..., description="Last event object (required by spec)")
+    last_telemetry: Dict[str, Any] = Field(..., description="Last telemetry object (required by spec)")
     current_location: Optional[GeoJSONFeature] = Field(None, description="Current vehicle location")
     trip_ids: Optional[List[UUID]] = Field(None, description="Active trip IDs")
 
     class Config:
-        use_enum_values = True
+        ...
 
 
 class VehiclesResponse(MDSResponse):
-    """Response model for /vehicles endpoint."""
-    vehicles: List[Vehicle] = Field(..., description="Array of vehicle objects")
-    last_updated: int = Field(..., description="Timestamp when data was last updated (milliseconds)")
-    ttl: int = Field(..., description="Time to live for this data (milliseconds)")
-    links: Optional[List[Dict[str, str]]] = Field(None, description="Pagination links")
+    data: Dict[str, List[Vehicle]] = Field(..., description="Response data payload")
 
 
 class VehicleStatusResponse(MDSResponse):
-    """Response model for /vehicles/status endpoint."""
-    vehicles_status: List[VehicleStatus] = Field(..., description="Array of vehicle status objects")
-    last_updated: int = Field(..., description="Timestamp when data was last updated (milliseconds)")
-    ttl: int = Field(..., description="Time to live for this data (milliseconds)")
-    links: Optional[Dict[str, str]] = Field(None, description="Pagination links")
+    data: Dict[str, List[VehicleStatus]] = Field(..., description="Response data payload")
+
+
+class SpecificVehicleStatusResponse(MDSResponse):
+    """Response model for a single vehicle's status, without pagination links."""
+    data: Dict[str, VehicleStatus] = Field(..., description="Response data payload for a single vehicle status")
+
+
+class VehicleEvent(BaseModel):
+    """Vehicle event model."""
+    device_id: UUID = Field(..., description="Unique device identifier")
+    provider_id: str = Field(..., description="Provider identifier string")
+    event_type: str = Field(..., description="Type of the event")
+    event_time: int = Field(..., description="Timestamp of the event (ms)")
+    event_data: Dict[str, Any] = Field(..., description="Event-specific data")

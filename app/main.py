@@ -59,18 +59,18 @@ app = FastAPI(
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions with MDS-compliant error responses."""
     try:
-        error_code = exc.detail.get("error_code", "unknown_error") if isinstance(exc.detail, dict) else "unknown_error"
-        error_details = str(exc.detail.get("error_details", "Unknown details")) if isinstance(exc.detail, dict) else str(exc.detail)
+        # Use 'error' as the key to be consistent with tests
+        error_code = exc.detail.get("error", "unknown_error") if isinstance(exc.detail, dict) else "unknown_error"
+        error_description = str(exc.detail.get("error_description", "Unknown details")) if isinstance(exc.detail, dict) else str(exc.detail)
     except (AttributeError, TypeError):
         error_code = "unknown_error"
-        error_details = str(exc.detail) if exc.detail else "Unknown error occurred"
+        error_description = str(exc.detail) if exc.detail else "Unknown error occurred"
 
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": error_code,
-            "error_description": error_details,
-            "error_details": error_details
+            "error_description": error_description,
         },
         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
     )
@@ -78,13 +78,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle validation errors with proper 400 status code."""
+    """Handle validation errors with proper 422 status code."""
     return JSONResponse(
-        status_code=400,
+        status_code=422,
         content={
             "error": "validation_error",
             "error_description": str(exc),
-            "error_details": str(exc)
         },
         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
     )

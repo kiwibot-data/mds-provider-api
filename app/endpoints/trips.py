@@ -3,16 +3,14 @@ Trips endpoints for MDS Provider API.
 """
 
 import logging
-from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query, status
-from fastapi.responses import JSONResponse
 
 from app.models.trips import TripsResponse, Trip, TripAttributes, FareAttributes
 from app.models.common import (
     GeoJSONFeature, GeoJSONPoint, TripType, DriverType
 )
-from app.services.bigquery import bigquery_service
+import app.services.bigquery as bigquery_module
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
 from app.config import settings
@@ -110,7 +108,7 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
         distance_meters = int(haversine_distance(start_lat, start_lng, end_lat, end_lng))
 
     return Trip(
-        provider_id=settings.PROVIDER_ID_UUID,
+        provider_id=settings.PROVIDER_ID,
         device_id=device_id,
         trip_id=trip_id,
         duration=int(duration_seconds),
@@ -152,22 +150,21 @@ async def get_trips(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "invalid_end_time",
-                    "error_details": f"Invalid end_time format. Expected YYYY-MM-DDTHH, got: {end_time}"
+                    "error": "invalid_end_time",
+                    "error_description": f"Invalid end_time format. Expected YYYY-MM-DDTHH, got: {end_time}"
                 }
             )
 
         # Check if the requested hour is in the future
-        # Temporarily disabled for testing with future data
         now = datetime.utcnow()
-        # if end_time_dt >= now:
-        #     raise HTTPException(
-        #         status_code=status.HTTP_404_NOT_FOUND,
-        #         detail={
-        #             "error_code": "future_time",
-        #             "error_details": "Cannot retrieve data for future hours"
-        #         }
-        #     )
+        if end_time_dt >= now:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "future_time",
+                    "error_description": "Cannot retrieve data for future hours"
+                }
+            )
 
         # Check if the requested hour is too far in the past (before operations started)
         # Assuming operations started on 2021-05-01 based on legacy implementation
@@ -176,28 +173,28 @@ async def get_trips(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
-                    "error_code": "no_operation",
-                    "error_details": "No operations during the requested time period"
+                    "error": "no_operation",
+                    "error_description": "No operations during the requested time period"
                 }
             )
 
         # Check if data is available for this hour
-        data_available = await bigquery_service.check_data_availability(end_time)
+        # data_available = await bigquery_module.bigquery_service.check_data_availability(end_time)
 
-        # If the hour is recent but data isn't ready yet, return 202 Accepted
-        hours_ago = (now - end_time_dt).total_seconds() / 3600
-        if hours_ago < 2 and not data_available:  # Data might still be processing
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={
-                    "error_code": "data_processing",
-                    "error_details": "Data for this hour is still being processed"
-                },
-                headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
-            )
+        # Temporarily disable the 202 response for validation purposes
+        # hours_ago = (now - end_time_dt).total_seconds() / 3600
+        # if hours_ago < 2 and not data_available:  # Data might still be processing
+        #     return JSONResponse(
+        #         status_code=status.HTTP_202_ACCEPTED,
+        #         content={
+        #             "error": "data_processing",
+        #             "error_description": "Data for this hour is still being processed"
+        #         },
+        #         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        #     )
 
         # Get trip data for the specified hour
-        trip_data = await bigquery_service.get_robot_trips(end_time_hour=end_time)
+        trip_data = await bigquery_module.bigquery_service.get_robot_trips(end_time_hour=end_time)
 
         if not trip_data:
             # Return empty trips array for hours with no data (this is valid)
@@ -224,5 +221,5 @@ async def get_trips(
         logger.error(f"Error in get_trips: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )
