@@ -49,19 +49,26 @@ async def get_telemetry(
     This endpoint returns GPS telemetry points for the specified hour.
     The telemetry_time parameter must be in format YYYY-MM-DDTHH.
     """
+    request_id = id(request)
+    logger.info(f"[{request_id}] Starting telemetry request for {telemetry_time}")
+    
     try:
         # Authenticate request
+        logger.debug(f"[{request_id}] Authenticating request")
         provider_id = get_current_provider_id(request)
+        logger.debug(f"[{request_id}] Authenticated as provider: {provider_id}")
 
         # Validate telemetry_time format
         try:
             telemetry_time_dt = datetime.strptime(telemetry_time, "%Y-%m-%dT%H")
-        except ValueError:
+            logger.debug(f"[{request_id}] Parsed telemetry_time: {telemetry_time_dt}")
+        except ValueError as ve:
+            logger.error(f"[{request_id}] Invalid time format: {ve}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=400,
                 detail={
-                    "error_code": "invalid_telemetry_time",
-                    "error_details": f"Invalid telemetry_time format. Expected YYYY-MM-DDTHH, got: {telemetry_time}"
+                    "error": "invalid_telemetry_time",
+                    "error_description": f"Invalid telemetry_time format. Expected YYYY-MM-DDTHH, got: {telemetry_time}"
                 }
             )
 
@@ -83,17 +90,28 @@ async def get_telemetry(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
-                    "error_code": "no_operation",
-                    "error_details": "No operations during the requested time period"
+                    "error": "no_operation",
+                    "error_description": "No operations during the requested time period"
                 }
             )
 
         # Get telemetry data for the specified hour
-        telemetry_data = await bigquery_service.get_robot_telemetry(telemetry_time)
+        logger.info(f"[{request_id}] Querying BigQuery for telemetry data")
+        try:
+            telemetry_data = await bigquery_service.get_robot_telemetry(telemetry_time)
+            logger.info(f"[{request_id}] Retrieved {len(telemetry_data) if telemetry_data else 0} telemetry records")
+        except Exception as bq_error:
+            logger.error(f"[{request_id}] BigQuery error: {str(bq_error)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "database_error",
+                    "error_description": "Failed to retrieve telemetry data"
+                }
+            )
 
         if not telemetry_data:
-            # Return empty telemetry array for hours with no data
-            logger.info(f"No telemetry found for hour {telemetry_time}")
+            logger.info(f"[{request_id}] No telemetry found for hour {telemetry_time}")
             return TelemetryResponse(telemetry=[])
 
         # Transform telemetry data to MDS format
@@ -180,15 +198,15 @@ async def get_telemetry(
         # Sort telemetry by timestamp
         telemetry_points.sort(key=lambda x: x.timestamp)
 
-        logger.info(f"Returning {len(telemetry_points)} telemetry points for hour {telemetry_time}, provider {provider_id}")
+        logger.info(f"[{request_id}] Successfully returning {len(telemetry_points)} telemetry points for hour {telemetry_time}")
 
         return TelemetryResponse(telemetry=telemetry_points)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in get_telemetry: {str(e)}")
+        logger.error(f"[{request_id}] Unexpected error in get_telemetry: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": "Internal server error"}
         )

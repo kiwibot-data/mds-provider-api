@@ -3,7 +3,7 @@ Vehicle-related Pydantic models for MDS Provider API.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 
 from app.models.common import (
@@ -45,8 +45,9 @@ class Vehicle(BaseModel):
     vehicle_attributes: VehicleAttributes = Field(..., description="Static vehicle attributes")
     last_reported: Optional[int] = Field(None, description="Last time vehicle reported (ms)")
 
-    class Config:
-        ...
+    model_config = ConfigDict(
+        exclude_none=True  # Exclude None values from JSON serialization
+    )
 
 
 class VehicleStatus(BaseModel):
@@ -62,8 +63,9 @@ class VehicleStatus(BaseModel):
     current_location: Optional[GeoJSONFeature] = Field(None, description="Current vehicle location")
     trip_ids: Optional[List[UUID]] = Field(None, description="Active trip IDs")
 
-    class Config:
-        ...
+    model_config = ConfigDict(
+        exclude_none=True  # Exclude None values from JSON serialization
+    )
 
 
 class VehiclesResponse(MDSResponse):

@@ -318,6 +318,7 @@ class DataTransformer:
             pass
 
         # Serialize nested objects to dicts as VehicleStatus expects Dict fields
+        # Use mode='json' and exclude_none=True to ensure None values are excluded and UUIDs are serialized
         return VehicleStatus(
             device_id=device_id,
             provider_id=str(self.provider_id),
@@ -325,8 +326,8 @@ class DataTransformer:
             vehicle_state=vehicle_state,
             last_event_time=last_event_time,
             last_event_types=last_event_types,
-            last_event=last_event_obj.model_dump(),
-            last_telemetry=last_telemetry_obj.model_dump(),
+            last_event=last_event_obj.model_dump(mode='json', exclude_none=True),
+            last_telemetry=last_telemetry_obj.model_dump(mode='json', exclude_none=True),
             current_location=current_location,
             trip_ids=trip_ids if trip_ids else None
         )

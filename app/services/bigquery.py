@@ -21,30 +21,49 @@ class BigQueryService:
     def __init__(self):
         """Initialize BigQuery client."""
         self.client = bigquery.Client(project=settings.BIGQUERY_PROJECT_ID)
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        # Limit concurrent BigQuery operations to prevent resource exhaustion
+        self.executor = ThreadPoolExecutor(max_workers=3)
+        self.query_timeout = 30  # seconds
 
     async def _run_query_async(self, query: str) -> List[Dict[str, Any]]:
-        """Run BigQuery query asynchronously."""
+        """Run BigQuery query asynchronously with timeout."""
         loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
-                self.executor, self._execute_query, query
+            # Add timeout to prevent hanging queries during high load
+            result = await asyncio.wait_for(
+                loop.run_in_executor(self.executor, self._execute_query, query),
+                timeout=self.query_timeout
             )
             return result
+        except asyncio.TimeoutError:
+            logger.error(f"BigQuery query timeout after {self.query_timeout}s")
+            raise Exception("Database query timeout - please try again later")
         except Exception as e:
             logger.error(f"BigQuery query failed: {str(e)}")
             raise
 
     def _execute_query(self, query: str) -> List[Dict[str, Any]]:
-        """Execute BigQuery query synchronously."""
+        """Execute BigQuery query synchronously with job config."""
         try:
-            logger.info(f"Executing BigQuery query")
-            query_job = self.client.query(query)
-            results = query_job.result()
+            logger.info("Executing BigQuery query")
+            
+            # Configure query job with timeout and resource limits
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[],
+                use_query_cache=True,
+                use_legacy_sql=False,
+                maximum_bytes_billed=100 * 1024 * 1024,  # 100MB limit
+            )
+            
+            query_job = self.client.query(query, job_config=job_config)
+            
+            # Wait for query completion with timeout
+            results = query_job.result(timeout=25)  # Slightly less than async timeout
+            
             return [dict(row) for row in results]
         except GoogleCloudError as e:
             logger.error(f"BigQuery error: {str(e)}")
-            raise
+            raise Exception(f"Database error: {str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error in BigQuery query: {str(e)}")
             raise

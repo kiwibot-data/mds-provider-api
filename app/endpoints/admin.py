@@ -77,7 +77,7 @@ async def create_api_key(
         logger.error(f"Error creating API key: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )
 
 
@@ -120,7 +120,7 @@ async def list_api_keys(request: Request):
         logger.error(f"Error listing API keys: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )
 
 
@@ -155,7 +155,7 @@ async def revoke_api_key(
         if not full_key:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error_code": "key_not_found", "error_details": "API key not found"}
+                detail={"error": "key_not_found", "error_description": "API key not found"}
             )
         
         # Revoke the key
@@ -164,7 +164,7 @@ async def revoke_api_key(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error_code": "key_not_found", "error_details": "API key not found"}
+                detail={"error": "key_not_found", "error_description": "API key not found"}
             )
         
         logger.info(f"Revoked API key {key_preview} by admin {provider_id}")
@@ -177,5 +177,5 @@ async def revoke_api_key(
         logger.error(f"Error revoking API key: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )

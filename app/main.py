@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.endpoints import vehicles, trips, events, admin, telemetry
 from app.auth.middleware import AuthMiddleware
+from app.middleware.concurrency import ConcurrencyMiddleware
 from app.config import settings
 
 
@@ -113,6 +114,9 @@ app.add_middleware(
     allow_methods=["GET"],  # MDS Provider API is read-only
     allow_headers=["*"],
 )
+
+# Concurrency limiting middleware (applied first, so it runs last)
+app.add_middleware(ConcurrencyMiddleware, max_concurrent_requests=8)
 
 # Authentication middleware
 app.add_middleware(AuthMiddleware)

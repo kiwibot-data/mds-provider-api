@@ -3,7 +3,7 @@ Telemetry-related Pydantic models for MDS Provider API.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from uuid import UUID
 
 from app.models.common import MDSResponse
@@ -47,11 +47,15 @@ class GPS(BaseModel):
             raise ValueError("Satellites must be >= 0")
         return v
 
+    model_config = ConfigDict(
+        exclude_none=True  # Exclude None values from JSON serialization
+    )
+
 
 class Telemetry(BaseModel):
     """Telemetry model for vehicle GPS data - MDS 2.0 compliant."""
     # Required fields per MDS 2.0 spec
-    provider_id: str = Field(..., description="Provider identifier string")
+    provider_id: UUID = Field(..., description="Provider identifier UUID")
     device_id: UUID = Field(..., description="Unique device identifier")
     telemetry_id: UUID = Field(..., description="Unique telemetry point identifier")
     timestamp: int = Field(..., description="Timestamp when GPS data was recorded (milliseconds since epoch)")

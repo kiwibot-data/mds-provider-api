@@ -40,13 +40,26 @@ async def get_vehicles(
     Get all vehicles.
     """
     robots = await get_all_robots()
-    vehicles = [transform_robot_to_vehicle(robot) for robot in robots]
+    vehicles_models = [transform_robot_to_vehicle(robot) for robot in robots]
+    
+    # Serialize vehicles with exclude_none to remove None values
+    vehicles = [
+        vehicle.model_dump(mode='json', exclude_none=True)
+        for vehicle in vehicles_models
+    ]
 
     response_payload = {
         "version": settings.MDS_VERSION,
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 3600,
         "vehicles": vehicles,
+        "links": [
+            {
+                "links": {
+                    "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+                }
+            }
+        ]
     }
     logger.info(f"Response for /vehicles: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))
@@ -69,17 +82,20 @@ async def get_all_vehicle_statuses(
     robots = await get_all_robots()
     vehicle_statuses = [transform_robot_to_vehicle_status(robot) for robot in robots]
 
+    # Serialize vehicle_statuses with exclude_none to remove None values
+    vehicles_status_data = [
+        status.model_dump(mode='json', exclude_none=True) 
+        for status in vehicle_statuses
+    ]
+    
     response_payload = {
         "version": settings.MDS_VERSION,
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 60,
-        "vehicles_status": vehicle_statuses,
+        "vehicles_status": vehicles_status_data,
         "links": {
-            "first": str(request.url.include_query_params(skip=0, limit=limit)),
-            "last": str(request.url.include_query_params(skip=0, limit=limit)),
-            "prev": str(request.url.include_query_params(skip=max(0, skip - limit), limit=limit)),
-            "next": str(request.url.include_query_params(skip=skip + limit, limit=limit)),
-        },
+            "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+        }
     }
     logger.info(f"Response for /vehicles/status: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))
@@ -104,11 +120,21 @@ async def get_vehicle_by_id(
 
     vehicle = transform_robot_to_vehicle(robot)
     
+    # Serialize vehicle with exclude_none to remove None values
+    vehicle_data = vehicle.model_dump(mode='json', exclude_none=True)
+    
     response_payload = {
         "version": settings.MDS_VERSION,
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 3600,
-        "vehicles": [vehicle],
+        "vehicles": [vehicle_data],
+        "links": [
+            {
+                "links": {
+                    "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+                }
+            }
+        ]
     }
     logger.info(f"Response for /vehicles/{vehicle_id}: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))
@@ -133,11 +159,17 @@ async def get_vehicle_status_by_id(
 
     vehicle_status = transform_robot_to_vehicle_status(robot)
 
+    # Serialize vehicle_status with exclude_none to remove None values
+    vehicle_status_data = vehicle_status.model_dump(mode='json', exclude_none=True)
+
     response_payload = {
         "version": settings.MDS_VERSION,
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 60,
-        "vehicles_status": [vehicle_status],
+        "vehicles_status": [vehicle_status_data],
+        "links": {
+            "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+        }
     }
     logger.info(f"Response for /vehicles/{vehicle_id}/status: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))

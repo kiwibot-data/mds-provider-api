@@ -76,24 +76,70 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 response = await call_next(request)
                 return response
             except HTTPException as e:
-                # If API key fails, immediately return the error
-                raise e
+                # Return proper JSON error response for API key failures
+                from fastapi.responses import JSONResponse
+                from app.config import settings
+                return JSONResponse(
+                    status_code=e.status_code,
+                    content={
+                        "error": e.detail.get("error", "authentication_error") if isinstance(e.detail, dict) else "authentication_error",
+                        "error_description": e.detail.get("error_description", str(e.detail)) if isinstance(e.detail, dict) else str(e.detail)
+                    },
+                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                )
 
-        # Try JWT authentication (Auth0)
+        # Try JWT authentication (Auth0) if Authorization header looks like JWT
         if authorization:
             try:
                 # Check if authorization header has proper format
                 if not authorization.strip():
                     raise ValueError("Empty authorization header")
                 
-                # Split authorization header safely
+                # Handle different authorization header formats
                 auth_parts = authorization.split(" ", 1)
-                if len(auth_parts) != 2:
-                    raise ValueError("Invalid authorization header format. Expected 'Bearer <token>'")
                 
-                scheme, token = auth_parts
-                if scheme.lower() != "bearer":
-                    raise ValueError("Invalid authorization scheme. Expected 'Bearer'")
+                if len(auth_parts) == 2:
+                    # Standard format: "Bearer <token>"
+                    scheme, token = auth_parts
+                    if scheme.lower() != "bearer":
+                        raise ValueError("Invalid authorization scheme. Expected 'Bearer'")
+                    
+                    # Check if the Bearer token is actually an API key
+                    if len(token) < 100 and '.' not in token:
+                        try:
+                            auth_data = api_key_handler.validate_api_key(token)
+                            request.state.auth = {
+                                "provider_id": auth_data["provider_id"],
+                                "auth_type": "api_key",
+                                "permissions": auth_data["permissions"]
+                            }
+                            response = await call_next(request)
+                            return response
+                        except HTTPException:
+                            # If API key fails, continue with JWT validation
+                            pass
+                elif len(auth_parts) == 1:
+                    # Direct token format: "<token>"
+                    token = auth_parts[0]
+                    
+                    # Check if this looks like an API key instead of JWT
+                    # JWT tokens are much longer and contain dots, API keys are shorter
+                    if len(token) < 100 and '.' not in token:
+                        # This looks like an API key, try API key authentication instead
+                        try:
+                            auth_data = api_key_handler.validate_api_key(token)
+                            request.state.auth = {
+                                "provider_id": auth_data["provider_id"],
+                                "auth_type": "api_key",
+                                "permissions": auth_data["permissions"]
+                            }
+                            response = await call_next(request)
+                            return response
+                        except HTTPException:
+                            # If API key also fails, continue with JWT attempt
+                            pass
+                else:
+                    raise ValueError("Invalid authorization header format")
                 
                 # Validate token is not empty
                 if not token.strip():
@@ -108,24 +154,51 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 }
                 response = await call_next(request)
                 return response
-            except HTTPException:
-                # Re-raise HTTP exceptions from JWT handler
-                raise
+            except HTTPException as e:
+                # Return proper JSON error response for JWT failures
+                from fastapi.responses import JSONResponse
+                from app.config import settings
+                return JSONResponse(
+                    status_code=e.status_code,
+                    content={
+                        "error": e.detail.get("error", "authentication_error") if isinstance(e.detail, dict) else "authentication_error",
+                        "error_description": e.detail.get("error_description", str(e.detail)) if isinstance(e.detail, dict) else str(e.detail)
+                    },
+                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                )
             except ValueError as e:
-                raise HTTPException(
+                from fastapi.responses import JSONResponse
+                from app.config import settings
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=f"Invalid authorization header: {str(e)}"
+                    content={
+                        "error": "invalid_authorization_header",
+                        "error_description": f"Invalid authorization header: {str(e)}"
+                    },
+                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
                 )
             except Exception as e:
-                raise HTTPException(
+                from fastapi.responses import JSONResponse
+                from app.config import settings
+                return JSONResponse(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Authentication failed: {str(e)}"
+                    content={
+                        "error": "authentication_failed",
+                        "error_description": f"Authentication failed: {str(e)}"
+                    },
+                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
                 )
 
         # No valid authentication found
-        raise HTTPException(
+        from fastapi.responses import JSONResponse
+        from app.config import settings
+        return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Provide either X-API-Key header or Authorization: Bearer <token>"
+            content={
+                "error": "authentication_required",
+                "error_description": "Authentication required. Provide either X-API-Key header or Authorization: Bearer <token>"
+            },
+            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
         )
 
 

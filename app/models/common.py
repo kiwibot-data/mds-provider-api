@@ -3,7 +3,7 @@ Common Pydantic models for MDS Provider API.
 """
 
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from datetime import datetime
 from enum import Enum
 
@@ -135,7 +135,9 @@ class MDSResponse(BaseModel):
     """Base MDS response model."""
     version: str = Field(settings.MDS_VERSION, description="MDS version")
 
-    class Config:
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             datetime: lambda v: int(v.timestamp() * 1000)  # Convert to milliseconds timestamp
-        }
+        },
+        exclude_none=True  # Exclude None values from JSON serialization
+    )

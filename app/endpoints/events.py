@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, Query, status
 
 from app.models.events import EventsResponse, RealtimeEventsResponse, Event
 from app.models.common import EventType, VehicleState
+from app.models.telemetry import GPS
 from app.services.bigquery import bigquery_service
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
@@ -49,12 +50,12 @@ def create_event_from_location_change(
     vehicle_state = data_transformer.determine_vehicle_state(current_location)
     event_types = data_transformer._get_event_types_for_state(vehicle_state)
 
-    # Create location GeoJSON
+    # Create location GPS object
     lat = current_location.get('latitude')
     lng = current_location.get('longitude')
     event_location = None
     if lat is not None and lng is not None:
-        event_location = data_transformer.transform_location_to_geojson(lat, lng)
+        event_location = GPS(lat=lat, lng=lng)
 
     # Generate event_id UUID from event data
     from uuid import uuid5, NAMESPACE_DNS
@@ -100,8 +101,8 @@ async def get_historical_events(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "invalid_event_time",
-                    "error_details": f"Invalid event_time format. Expected YYYY-MM-DDTHH, got: {event_time}"
+                    "error": "invalid_event_time",
+                    "error_description": f"Invalid event_time format. Expected YYYY-MM-DDTHH, got: {event_time}"
                 }
             )
 
@@ -123,8 +124,8 @@ async def get_historical_events(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
-                    "error_code": "no_operation",
-                    "error_details": "No operations during the requested time period"
+                    "error": "no_operation",
+                    "error_description": "No operations during the requested time period"
                 }
             )
 
@@ -183,21 +184,35 @@ async def get_historical_events(
                 else:
                     event_time_ms = int(datetime.fromisoformat(str(event_time)).timestamp() * 1000)
 
-                # Create location GeoJSON
+                # Create location GPS object
                 lat = event_data.get('latitude')
                 lng = event_data.get('longitude')
                 event_location = None
                 if lat is not None and lng is not None:
-                    event_location = data_transformer.transform_location_to_geojson(lat, lng)
+                    event_location = GPS(lat=lat, lng=lng)
 
                 # Determine event type and vehicle state from event_type
                 event_type_str = event_data.get('event_type', 'other')
+                trip_ids = None
+                
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
+                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
+                    from uuid import uuid5, NAMESPACE_DNS
+                    job_id = event_data.get('job_id', 'unknown')
+                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
+                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
+                    trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
+                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
+                    from uuid import uuid5, NAMESPACE_DNS
+                    job_id = event_data.get('job_id', 'unknown')
+                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
+                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
+                    trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE
@@ -213,7 +228,8 @@ async def get_historical_events(
                     vehicle_state=vehicle_state,
                     timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
-                    location=event_location
+                    location=event_location,
+                    trip_ids=trip_ids
                 )
                 events.append(event)
             except Exception as e:
@@ -230,7 +246,7 @@ async def get_historical_events(
         logger.error(f"Error in get_historical_events: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )
 
 
@@ -263,8 +279,8 @@ async def get_recent_events(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "invalid_time_range",
-                    "error_details": "Invalid timestamp format"
+                    "error": "invalid_time_range",
+                    "error_description": "Invalid timestamp format"
                 }
             )
 
@@ -273,8 +289,8 @@ async def get_recent_events(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "invalid_time_range",
-                    "error_details": "start_time must be before end_time"
+                    "error": "invalid_time_range",
+                    "error_description": "start_time must be before end_time"
                 }
             )
 
@@ -286,8 +302,8 @@ async def get_recent_events(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "time_range_too_old",
-                    "error_details": "start_time cannot be more than 2 weeks ago"
+                    "error": "time_range_too_old",
+                    "error_description": "start_time cannot be more than 2 weeks ago"
                 }
             )
 
@@ -321,21 +337,35 @@ async def get_recent_events(
                 else:
                     event_time_ms = int(datetime.fromisoformat(str(event_time)).timestamp() * 1000)
 
-                # Create location GeoJSON
+                # Create location GPS object
                 lat = event_data.get('latitude')
                 lng = event_data.get('longitude')
                 event_location = None
                 if lat is not None and lng is not None:
-                    event_location = data_transformer.transform_location_to_geojson(lat, lng)
+                    event_location = GPS(lat=lat, lng=lng)
 
                 # Determine event type and vehicle state from event_type
                 event_type_str = event_data.get('event_type', 'other')
+                trip_ids = None
+                
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
+                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
+                    from uuid import uuid5, NAMESPACE_DNS
+                    job_id = event_data.get('job_id', 'unknown')
+                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
+                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
+                    trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
+                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
+                    from uuid import uuid5, NAMESPACE_DNS
+                    job_id = event_data.get('job_id', 'unknown')
+                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
+                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
+                    trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE
@@ -351,7 +381,8 @@ async def get_recent_events(
                     vehicle_state=vehicle_state,
                     timestamp=event_time_ms,
                     publication_time=int(datetime.utcnow().timestamp() * 1000),
-                    location=event_location
+                    location=event_location,
+                    trip_ids=trip_ids
                 )
                 events.append(event)
             except Exception as e:
@@ -363,8 +394,17 @@ async def get_recent_events(
 
         logger.info(f"Returning {len(events)} recent events for provider {provider_id}")
 
-        return RealtimeEventsResponse(
+        response = RealtimeEventsResponse(
             events=events
+            # Note: last_updated and ttl are not part of MDS 2.0 schema for /events/recent
+        )
+        
+        # Explicitly exclude None values during serialization with JSON mode to serialize UUIDs
+        # mode='json' ensures UUIDs and other types are properly serialized to JSON-compatible types
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
         )
 
     except HTTPException:
@@ -373,5 +413,5 @@ async def get_recent_events(
         logger.error(f"Error in get_recent_events: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "internal_error", "error_details": str(e)}
+            detail={"error": "internal_error", "error_description": str(e)}
         )
