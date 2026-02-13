@@ -5,6 +5,7 @@ Trips endpoints for MDS Provider API.
 import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query, status
+from fastapi.responses import JSONResponse
 
 from app.models.trips import TripsResponse, Trip, TripAttributes, FareAttributes
 from app.models.common import TripType, DriverType
@@ -181,7 +182,11 @@ async def get_trips(
         if not trip_data:
             # Return empty trips array for hours with no data (this is valid)
             logger.info(f"No trips found for hour {end_time}")
-            return TripsResponse(trips=[])
+            response = TripsResponse(trips=[])
+            return JSONResponse(
+                content=response.model_dump(mode='json', exclude_none=True),
+                headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+            )
 
         # Transform trip data to MDS format
         trips = []
@@ -195,7 +200,11 @@ async def get_trips(
 
         logger.info(f"Returning {len(trips)} trips for hour {end_time}, provider {provider_id}")
 
-        return TripsResponse(trips=trips)
+        response = TripsResponse(trips=trips)
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        )
 
     except HTTPException:
         raise

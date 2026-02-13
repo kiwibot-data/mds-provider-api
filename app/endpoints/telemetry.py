@@ -112,7 +112,11 @@ async def get_telemetry(
 
         if not telemetry_data:
             logger.info(f"[{request_id}] No telemetry found for hour {telemetry_time}")
-            return TelemetryResponse(telemetry=[])
+            response = TelemetryResponse(telemetry=[])
+            return JSONResponse(
+                content=response.model_dump(mode='json', exclude_none=True),
+                headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+            )
 
         # Transform telemetry data to MDS format
         telemetry_points = []
@@ -200,7 +204,11 @@ async def get_telemetry(
 
         logger.info(f"[{request_id}] Successfully returning {len(telemetry_points)} telemetry points for hour {telemetry_time}")
 
-        return TelemetryResponse(telemetry=telemetry_points)
+        response = TelemetryResponse(telemetry=telemetry_points)
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        )
 
     except HTTPException:
         raise
