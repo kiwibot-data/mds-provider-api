@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 from uuid import UUID
 
 from app.models.common import (
-    MDSResponse, GeoJSONFeature, TripType, DriverType
+    MDSResponse, TripType, DriverType
 )
+from app.models.telemetry import GPS
 
 
 class JourneyAttributes(BaseModel):
@@ -41,8 +42,8 @@ class Trip(BaseModel):
     trip_id: UUID = Field(..., description="Unique trip identifier")
     duration: int = Field(..., ge=0, description="Trip duration in seconds")
     distance: int = Field(..., ge=0, description="Trip distance in meters")
-    start_location: GeoJSONFeature = Field(..., description="Trip start location as GeoJSON Point")
-    end_location: GeoJSONFeature = Field(..., description="Trip end location as GeoJSON Point")
+    start_location: GPS = Field(..., description="Trip start location as GPS object")
+    end_location: GPS = Field(..., description="Trip end location as GPS object")
     start_time: int = Field(..., description="Trip start time (milliseconds since epoch)")
     end_time: int = Field(..., description="Trip end time (milliseconds since epoch)")
 

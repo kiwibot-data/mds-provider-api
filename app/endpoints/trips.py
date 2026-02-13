@@ -7,9 +7,8 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query, status
 
 from app.models.trips import TripsResponse, Trip, TripAttributes, FareAttributes
-from app.models.common import (
-    GeoJSONFeature, GeoJSONPoint, TripType, DriverType
-)
+from app.models.common import TripType, DriverType
+from app.models.telemetry import GPS
 import app.services.bigquery as bigquery_module
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
@@ -57,31 +56,14 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
     if end_lat is None or end_lng is None:
         raise ValueError("Trip data missing end location coordinates")
 
-    # Create start location GeoJSON
-    start_location = GeoJSONFeature(
-        type="Feature",
-        geometry=GeoJSONPoint(
-            type="Point",
-            coordinates=[start_lng, start_lat]  # GeoJSON is [longitude, latitude]
-        ),
-        properties={}
-    )
-
-    # Create end location GeoJSON
-    end_location = GeoJSONFeature(
-        type="Feature",
-        geometry=GeoJSONPoint(
-            type="Point",
-            coordinates=[end_lng, end_lat]  # GeoJSON is [longitude, latitude]
-        ),
-        properties={}
-    )
+    # Create start and end location GPS objects (MDS 2.0 expects GPS, not GeoJSON)
+    start_location = GPS(lat=start_lat, lng=start_lng)
+    end_location = GPS(lat=end_lat, lng=end_lng)
 
     # Create trip attributes
     trip_attributes = TripAttributes(
         driver_type=DriverType.AUTONOMOUS,  # Default for delivery robots
         has_payload=True,  # Assume delivery trips have payload
-        identification_required=False  # Default value
     )
 
     # Create fare attributes if available
@@ -108,7 +90,7 @@ def transform_trip_data_to_mds(trip_data: dict) -> Trip:
         distance_meters = int(haversine_distance(start_lat, start_lng, end_lat, end_lng))
 
     return Trip(
-        provider_id=settings.PROVIDER_ID,
+        provider_id=str(settings.PROVIDER_ID_UUID),
         device_id=device_id,
         trip_id=trip_id,
         duration=int(duration_seconds),

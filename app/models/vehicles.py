@@ -35,7 +35,6 @@ class Vehicle(BaseModel):
     device_id: UUID = Field(..., description="Unique device identifier")
     provider_id: str = Field(..., description="Provider identifier string")
     vehicle_id: str = Field(..., description="Vehicle identifier (string, not UUID)")
-    mfgr: str = Field("Kiwibot", description="Manufacturer (legacy field for tests)")
     vehicle_type: VehicleType = Field(VehicleType.DELIVERY_ROBOT, description="Vehicle type")
     @property
     def vehicle_type_str(self) -> str:

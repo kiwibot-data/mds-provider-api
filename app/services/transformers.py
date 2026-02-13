@@ -182,7 +182,6 @@ class DataTransformer:
             provider_id=str(self.provider_id),
             vehicle_type=VehicleType.DELIVERY_ROBOT,
             propulsion_types=[PropulsionType.ELECTRIC],
-            mfgr="Kiwibot",
             accessibility_attributes=accessibility,
             vehicle_attributes=vehicle_attributes,
         )
@@ -283,7 +282,7 @@ class DataTransformer:
             publication_time=last_event_time,
             event_geographies=[dummy_geography_id],  # Must have at least 1 item
             fuel_percent=50,
-            battery_pct=80.0,
+            battery_percent=80,
             data_provider_id=str(self.provider_id),  # Ensure it's string, not null
             trip_ids=[uuid5(NAMESPACE_DNS, f"{self.provider_id}.trip.{robot_id}")],
             associated_ticket="support-" + robot_id
