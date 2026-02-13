@@ -12,7 +12,7 @@ from app.models.telemetry import TelemetryResponse, Telemetry, GPS
 from app.services.bigquery import bigquery_service
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
-from app.config import settings
+from app.config import settings, MDSConstants
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,11 @@ async def get_telemetry(
 
         if not telemetry_data:
             logger.info(f"[{request_id}] No telemetry found for hour {telemetry_time}")
-            return TelemetryResponse(telemetry=[])
+            response = TelemetryResponse(telemetry=[])
+            return JSONResponse(
+                content=response.model_dump(mode='json', exclude_none=True),
+                headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+            )
 
         # Transform telemetry data to MDS format
         telemetry_points = []
@@ -200,7 +204,11 @@ async def get_telemetry(
 
         logger.info(f"[{request_id}] Successfully returning {len(telemetry_points)} telemetry points for hour {telemetry_time}")
 
-        return TelemetryResponse(telemetry=telemetry_points)
+        response = TelemetryResponse(telemetry=telemetry_points)
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+        )
 
     except HTTPException:
         raise

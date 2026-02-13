@@ -8,6 +8,7 @@ from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.auth.jwt_handler import jwt_handler
 from app.auth.api_key_handler import api_key_handler
+from app.config import MDSConstants
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -85,7 +86,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         "error": e.detail.get("error", "authentication_error") if isinstance(e.detail, dict) else "authentication_error",
                         "error_description": e.detail.get("error_description", str(e.detail)) if isinstance(e.detail, dict) else str(e.detail)
                     },
-                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                    headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
                 )
 
         # Try JWT authentication (Auth0) if Authorization header looks like JWT
@@ -164,7 +165,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         "error": e.detail.get("error", "authentication_error") if isinstance(e.detail, dict) else "authentication_error",
                         "error_description": e.detail.get("error_description", str(e.detail)) if isinstance(e.detail, dict) else str(e.detail)
                     },
-                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                    headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
                 )
             except ValueError as e:
                 from fastapi.responses import JSONResponse
@@ -175,7 +176,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         "error": "invalid_authorization_header",
                         "error_description": f"Invalid authorization header: {str(e)}"
                     },
-                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                    headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
                 )
             except Exception as e:
                 from fastapi.responses import JSONResponse
@@ -186,7 +187,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         "error": "authentication_failed",
                         "error_description": f"Authentication failed: {str(e)}"
                     },
-                    headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+                    headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
                 )
 
         # No valid authentication found
@@ -198,7 +199,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 "error": "authentication_required",
                 "error_description": "Authentication required. Provide either X-API-Key header or Authorization: Bearer <token>"
             },
-            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+            headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
         )
 
 

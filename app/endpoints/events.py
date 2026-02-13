@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request, Query, status
+from fastapi.responses import JSONResponse
 
 from app.models.events import EventsResponse, RealtimeEventsResponse, Event
 from app.models.common import EventType, VehicleState
@@ -13,7 +14,7 @@ from app.models.telemetry import GPS
 from app.services.bigquery import bigquery_service
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
-from app.config import settings
+from app.config import settings, MDSConstants
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ async def get_historical_events(
         #             "error_code": "data_processing",
         #             "error_details": "Data for this hour is still being processed"
         #         },
-        #         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        #         headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
         #     )
 
         # Create time range for the hour (ensure timezone-aware)
@@ -163,7 +164,11 @@ async def get_historical_events(
         if not events_data:
             # Return empty events array for hours with no data
             logger.info(f"No events found for hour {event_time}")
-            return EventsResponse(events=[])
+            response = EventsResponse(events=[])
+            return JSONResponse(
+                content=response.model_dump(mode='json', exclude_none=True),
+                headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+            )
 
         # Transform events data to MDS format
         events = []
@@ -238,7 +243,11 @@ async def get_historical_events(
 
         logger.info(f"Returning {len(events)} events for hour {event_time}, provider {provider_id}")
 
-        return EventsResponse(events=events)
+        response = EventsResponse(events=events)
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+        )
 
     except HTTPException:
         raise
@@ -401,10 +410,9 @@ async def get_recent_events(
         
         # Explicitly exclude None values during serialization with JSON mode to serialize UUIDs
         # mode='json' ensures UUIDs and other types are properly serialized to JSON-compatible types
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response.model_dump(mode='json', exclude_none=True),
-            headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+            headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
         )
 
     except HTTPException:

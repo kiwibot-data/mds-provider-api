@@ -5,6 +5,7 @@ Trips endpoints for MDS Provider API.
 import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query, status
+from fastapi.responses import JSONResponse
 
 from app.models.trips import TripsResponse, Trip, TripAttributes, FareAttributes
 from app.models.common import TripType, DriverType
@@ -12,7 +13,7 @@ from app.models.telemetry import GPS
 import app.services.bigquery as bigquery_module
 from app.services.transformers import data_transformer
 from app.auth.middleware import get_current_provider_id
-from app.config import settings
+from app.config import settings, MDSConstants
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ async def get_trips(
         #             "error": "data_processing",
         #             "error_description": "Data for this hour is still being processed"
         #         },
-        #         headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        #         headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
         #     )
 
         # Get trip data for the specified hour
@@ -181,7 +182,11 @@ async def get_trips(
         if not trip_data:
             # Return empty trips array for hours with no data (this is valid)
             logger.info(f"No trips found for hour {end_time}")
-            return TripsResponse(trips=[])
+            response = TripsResponse(trips=[])
+            return JSONResponse(
+                content=response.model_dump(mode='json', exclude_none=True),
+                headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+            )
 
         # Transform trip data to MDS format
         trips = []
@@ -195,7 +200,11 @@ async def get_trips(
 
         logger.info(f"Returning {len(trips)} trips for hour {end_time}, provider {provider_id}")
 
-        return TripsResponse(trips=trips)
+        response = TripsResponse(trips=trips)
+        return JSONResponse(
+            content=response.model_dump(mode='json', exclude_none=True),
+            headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
+        )
 
     except HTTPException:
         raise

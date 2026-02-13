@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.endpoints import vehicles, trips, events, admin, telemetry
 from app.auth.middleware import AuthMiddleware
 from app.middleware.concurrency import ConcurrencyMiddleware
-from app.config import settings
+from app.config import settings, MDSConstants
 
 
 @asynccontextmanager
@@ -73,7 +73,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "error": error_code,
             "error_description": error_description,
         },
-        headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
     )
 
 
@@ -86,7 +86,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "validation_error",
             "error_description": str(exc),
         },
-        headers={"Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"}
+        headers={"Content-Type": MDSConstants.CONTENT_TYPE_JSON}
     )
 
 
@@ -100,7 +100,7 @@ async def add_process_time_header(request: Request, call_next):
 
     # Add MDS content-type header if not already set
     if "Content-Type" not in response.headers:
-        response.headers["Content-Type"] = f"application/vnd.mds+json;version={settings.MDS_VERSION}"
+        response.headers["Content-Type"] = MDSConstants.CONTENT_TYPE_JSON
 
     return response
 

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import jwt
 
 from app.main import app
-from app.config import settings
+from app.config import settings, MDSConstants
 
 
 @pytest.fixture(scope="session")
@@ -139,5 +139,5 @@ def sample_trip_data():
 def mds_response_headers():
     """Standard MDS response headers."""
     return {
-        "Content-Type": f"application/vnd.mds+json;version={settings.MDS_VERSION}"
+        "Content-Type": MDSConstants.CONTENT_TYPE_JSON
     }
