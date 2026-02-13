@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi import HTTPException, status
 
+from app.config import MDSConstants
+
 
 class TestTripsEndpoint:
     """Tests for /trips endpoint."""
@@ -60,6 +62,7 @@ class TestTripsEndpoint:
 
         response = client.get(f"/trips?end_time={end_time}", headers=auth_headers)
         assert response.status_code == 200
+        assert response.headers["content-type"] == MDSConstants.CONTENT_TYPE_JSON
 
         data = response.json()
         assert "version" in data
@@ -78,6 +81,7 @@ class TestTripsEndpoint:
             end_time = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%dT%H")
             response = client.get(f"/trips?end_time={end_time}", headers=auth_headers)
             assert response.status_code == 200
+            assert response.headers["content-type"] == MDSConstants.CONTENT_TYPE_JSON
 
             data = response.json()
             assert data["trips"] == []
@@ -102,6 +106,7 @@ class TestTripsEndpoint:
 
         response = client.get(f"/trips?end_time={end_time}", headers=auth_headers)
         assert response.status_code == 200
+        assert response.headers["content-type"] == MDSConstants.CONTENT_TYPE_JSON
 
         data = response.json()
 
@@ -120,12 +125,10 @@ class TestTripsEndpoint:
             for field in required_fields:
                 assert field in trip
 
-            # Check location structure (GeoJSON)
+            # Check location structure (GPS object per MDS 2.0)
             start_location = trip["start_location"]
-            assert start_location["type"] == "Feature"
-            assert "geometry" in start_location
-            assert start_location["geometry"]["type"] == "Point"
-            assert "coordinates" in start_location["geometry"]
+            assert "lat" in start_location
+            assert "lng" in start_location
 
     def test_trips_time_validation(self, client, auth_headers, mock_jwt_handler):
         """Test various time format validations."""
