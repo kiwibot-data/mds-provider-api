@@ -203,21 +203,19 @@ async def get_historical_events(
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
-                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
-                    from uuid import uuid5, NAMESPACE_DNS
-                    job_id = event_data.get('job_id', 'unknown')
-                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
-                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
-                    trip_ids = [trip_id]
+                    # Generate trip_id matching trips/telemetry endpoints
+                    job_id = event_data.get('job_id')
+                    if job_id:
+                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
+                        trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
-                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
-                    from uuid import uuid5, NAMESPACE_DNS
-                    job_id = event_data.get('job_id', 'unknown')
-                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
-                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
-                    trip_ids = [trip_id]
+                    # Generate trip_id matching trips/telemetry endpoints
+                    job_id = event_data.get('job_id')
+                    if job_id:
+                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
+                        trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE
@@ -356,25 +354,23 @@ async def get_recent_events(
                 # Determine event type and vehicle state from event_type
                 event_type_str = event_data.get('event_type', 'other')
                 trip_ids = None
-                
+
                 if event_type_str == 'trip_start':
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
-                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
-                    from uuid import uuid5, NAMESPACE_DNS
-                    job_id = event_data.get('job_id', 'unknown')
-                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
-                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
-                    trip_ids = [trip_id]
+                    # Generate trip_id matching trips/telemetry endpoints
+                    job_id = event_data.get('job_id')
+                    if job_id:
+                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
+                        trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
-                    # Generate trip_id for trip events (required by MDS 2.0 for trip events)
-                    from uuid import uuid5, NAMESPACE_DNS
-                    job_id = event_data.get('job_id', 'unknown')
-                    trip_id_str = f"{settings.PROVIDER_ID}.trip.{job_id}.{robot_id}.{event_time_ms}"
-                    trip_id = uuid5(NAMESPACE_DNS, trip_id_str)
-                    trip_ids = [trip_id]
+                    # Generate trip_id matching trips/telemetry endpoints
+                    job_id = event_data.get('job_id')
+                    if job_id:
+                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
+                        trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE
