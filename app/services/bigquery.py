@@ -76,21 +76,17 @@ class BigQueryService:
     ) -> List[Dict[str, Any]]:
         """
         Fetch robot location data from pre-computed BigQuery table.
+        The precomputed table already contains only the relevant robots
+        (top 25 most active), so no default robot filter is needed.
 
         Args:
-            robot_ids: List of specific robot IDs to filter
+            robot_ids: List of specific robot IDs to filter (optional)
             since: Only return locations after this timestamp
             limit: Maximum number of records to return
 
         Returns:
             List of location records
         """
-        # Use the specific robot IDs from the sample query
-        default_robots = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
         # Build query for pre-computed vehicles table
         query = f"""
         SELECT
@@ -106,13 +102,9 @@ class BigQueryService:
         WHERE 1=1
         """
 
-        # Add robot ID filter
+        # Add robot ID filter only if specific robots requested
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
-        else:
-            # Use default robot list
-            robot_ids_str = "', '".join(default_robots)
             query += f" AND robot_id IN ('{robot_ids_str}')"
 
         # Add time filter
@@ -134,21 +126,17 @@ class BigQueryService:
     ) -> List[Dict[str, Any]]:
         """
         Fetch robot trip data from pre-computed BigQuery table.
+        The precomputed table already contains only the relevant robots
+        (top 25 most active), so no default robot filter is needed.
 
         Args:
-            robot_ids: List of specific robot IDs to filter
+            robot_ids: List of specific robot IDs to filter (optional)
             end_time_hour: Hour in format YYYY-MM-DDTHH for MDS compliance
             since: Only return trips after this timestamp
 
         Returns:
             List of trip records
         """
-        # Use the specific robot IDs from the sample query
-        default_robots = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
         # Build query for pre-computed trips table
         query = f"""
         SELECT
@@ -170,13 +158,9 @@ class BigQueryService:
         WHERE 1=1
         """
 
-        # Add robot ID filter
+        # Add robot ID filter only if specific robots requested
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
-        else:
-            # Use default robot list
-            robot_ids_str = "', '".join(default_robots)
             query += f" AND robot_id IN ('{robot_ids_str}')"
 
         # Add time filters
@@ -236,19 +220,15 @@ class BigQueryService:
 
     async def get_active_robot_list(self) -> List[Dict[str, Any]]:
         """
-        Get list of currently active robot data from the specific robot list.
+        Get list of currently active robot data from the precomputed vehicles table.
+        The precomputed table already contains only the relevant robots
+        (top 25 most active), so no hardcoded robot filter is needed.
 
         Returns:
             List of robot data dictionaries for robots with recent activity
         """
-        robot_ids = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
         cutoff_date = datetime.utcnow() - timedelta(days=settings.VEHICLE_RETENTION_DAYS)
-        robot_ids_str = "', '".join(robot_ids)
-        
+
         query = f"""
         SELECT
             t1.robot_id,
@@ -263,11 +243,9 @@ class BigQueryService:
         INNER JOIN (
             SELECT robot_id, MAX(last_updated) as max_last_updated
             FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
-            WHERE robot_id IN ('{robot_ids_str}')
-            AND last_updated >= '{cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}'
+            WHERE last_updated >= '{cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}'
             GROUP BY robot_id
         ) AS t2 ON t1.robot_id = t2.robot_id AND t1.last_updated = t2.max_last_updated
-        WHERE t1.robot_id IN ('{robot_ids_str}')
         """
 
         results = await self._run_query_async(query)
@@ -282,9 +260,11 @@ class BigQueryService:
     ) -> List[Dict[str, Any]]:
         """
         Fetch robot event data from pre-computed BigQuery table.
+        The precomputed table already contains only the relevant robots
+        (top 25 most active), so no default robot filter is needed.
 
         Args:
-            robot_ids: List of specific robot IDs to filter
+            robot_ids: List of specific robot IDs to filter (optional)
             since: Only return events after this timestamp
             until: Only return events before this timestamp
             limit: Maximum number of records to return
@@ -292,12 +272,6 @@ class BigQueryService:
         Returns:
             List of event records
         """
-        # Use the specific robot IDs from the sample query
-        default_robots = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
         # Build query for pre-computed events table
         query = f"""
         SELECT
@@ -314,16 +288,12 @@ class BigQueryService:
         WHERE 1=1
         """
 
-        # Add robot ID filter
+        # Add robot ID filter only if specific robots requested
         if robot_ids:
             robot_ids_str = "', '".join(robot_ids)
             query += f" AND robot_id IN ('{robot_ids_str}')"
-        else:
-            # Use default robot list
-            robot_ids_str = "', '".join(default_robots)
-            query += f" AND robot_id IN ('{robot_ids_str}')"
 
-        # Add time filters (temporarily disabled for debugging)
+        # Add time filters
         if since:
             query += f" AND event_time >= '{since.isoformat()}'"
         if until:
@@ -334,9 +304,8 @@ class BigQueryService:
         if limit:
             query += f" LIMIT {limit}"
 
-        # Debug: Log the query being executed
-        logger.info(f"Executing events query: {query}")
-        
+        logger.info("Executing events query")
+
         result = await self._run_query_async(query)
         logger.info(f"Events query returned {len(result)} rows")
         return result
@@ -347,6 +316,8 @@ class BigQueryService:
     ) -> List[Dict[str, Any]]:
         """
         Fetch robot telemetry data from pre-computed BigQuery table.
+        The precomputed table already contains only the relevant robots
+        (top 25 most active), so no default robot filter is needed.
 
         Args:
             telemetry_time: Hour in format YYYY-MM-DDTHH for MDS compliance
@@ -354,12 +325,6 @@ class BigQueryService:
         Returns:
             List of telemetry records (using trip start/end points as minimum viable telemetry)
         """
-        # Use the specific robot IDs from the sample query
-        default_robots = [
-            '4F403', '4E006', '4E072', '4E096', '4E103', '4E105', '4F148', '4F175', '4F055',
-            '4H001', '4H002', '4H004', '4H005', '4H011', '4H013', '4H014', '4H015', '4H017', '4H020'
-        ]
-        
         # Build query for pre-computed trips table (using start/end points as telemetry)
         query = f"""
         SELECT
@@ -376,10 +341,6 @@ class BigQueryService:
         FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
         WHERE 1=1
         """
-
-        # Add robot ID filter
-        robot_ids_str = "', '".join(default_robots)
-        query += f" AND robot_id IN ('{robot_ids_str}')"
 
         # Add time filter for the specified hour
         try:
