@@ -78,6 +78,7 @@ def mock_bigquery_service():
         mock_service.get_robot_trips.return_value = [
             {
                 "robot_id": "4F403",
+                "job_id": "test-job-001",
                 "trip_start": datetime.utcnow() - timedelta(hours=1),
                 "trip_end": datetime.utcnow(),
                 "trip_duration_seconds": 3600,
@@ -131,7 +132,25 @@ def sample_trip_data():
         "trip_end": datetime.utcnow(),
         "trip_duration_seconds": 3600,
         "start_latitude": 37.7749,
-        "start_longitude": -122.4194
+        "start_longitude": -122.4194,
+        "end_latitude": 37.7850,
+        "end_longitude": -122.4094
+    }
+
+
+@pytest.fixture
+def sample_event_data():
+    """Sample event data for testing."""
+    return {
+        "robot_id": "4F403",
+        "event_id": "event_4F403_step1",
+        "event_type": "trip_end",
+        "event_time": datetime.utcnow(),
+        "latitude": 37.7850,
+        "longitude": -122.4094,
+        "event_data": None,
+        "created_at": datetime.utcnow(),
+        "job_id": "test-job-123"
     }
 
 
@@ -141,3 +160,109 @@ def mds_response_headers():
     return {
         "Content-Type": MDSConstants.CONTENT_TYPE_JSON
     }
+
+
+@pytest.fixture(scope="function")
+def mock_cross_endpoint_service():
+    """Fixture providing consistent mock data across trips, events, and telemetry endpoints.
+
+    All three endpoints share the same job_ids so trip_ids are consistent.
+    """
+    job_ids = ["job-aaa-111", "job-bbb-222"]
+    base_time = datetime.utcnow() - timedelta(hours=2)
+
+    trips_data = [
+        {
+            "robot_id": "4F403",
+            "job_id": job_ids[0],
+            "trip_id": f"trip_{job_ids[0]}",
+            "trip_start": base_time,
+            "trip_end": base_time + timedelta(minutes=30),
+            "trip_duration_seconds": 1800,
+            "start_latitude": 38.9197, "start_longitude": -77.0218,
+            "end_latitude": 38.9250, "end_longitude": -77.0300,
+            "status": "completed",
+            "user_id": "user1",
+            "created_at": base_time,
+            "updated_at": base_time,
+        },
+        {
+            "robot_id": "4E006",
+            "job_id": job_ids[1],
+            "trip_id": f"trip_{job_ids[1]}",
+            "trip_start": base_time + timedelta(minutes=5),
+            "trip_end": base_time + timedelta(minutes=40),
+            "trip_duration_seconds": 2100,
+            "start_latitude": 38.9100, "start_longitude": -77.0100,
+            "end_latitude": 38.9200, "end_longitude": -77.0200,
+            "status": "completed",
+            "user_id": "user2",
+            "created_at": base_time,
+            "updated_at": base_time,
+        },
+    ]
+
+    events_data = [
+        # trip_start for job 0
+        {
+            "robot_id": "4F403",
+            "event_id": "event_4F403_start_0",
+            "event_type": "trip_start",
+            "event_time": base_time,
+            "latitude": 38.9197, "longitude": -77.0218,
+            "event_data": None,
+            "created_at": base_time,
+            "job_id": job_ids[0],
+        },
+        # trip_end for job 0
+        {
+            "robot_id": "4F403",
+            "event_id": "event_4F403_end_0",
+            "event_type": "trip_end",
+            "event_time": base_time + timedelta(minutes=30),
+            "latitude": 38.9250, "longitude": -77.0300,
+            "event_data": None,
+            "created_at": base_time + timedelta(minutes=30),
+            "job_id": job_ids[0],
+        },
+        # trip_start for job 1
+        {
+            "robot_id": "4E006",
+            "event_id": "event_4E006_start_1",
+            "event_type": "trip_start",
+            "event_time": base_time + timedelta(minutes=5),
+            "latitude": 38.9100, "longitude": -77.0100,
+            "event_data": None,
+            "created_at": base_time + timedelta(minutes=5),
+            "job_id": job_ids[1],
+        },
+        # trip_end for job 1
+        {
+            "robot_id": "4E006",
+            "event_id": "event_4E006_end_1",
+            "event_type": "trip_end",
+            "event_time": base_time + timedelta(minutes=40),
+            "latitude": 38.9200, "longitude": -77.0200,
+            "event_data": None,
+            "created_at": base_time + timedelta(minutes=40),
+            "job_id": job_ids[1],
+        },
+    ]
+
+    telemetry_data = trips_data  # Telemetry endpoint queries trips_processed
+
+    with patch("app.services.bigquery.bigquery_service", new_callable=AsyncMock) as mock_service:
+        mock_service.get_robot_trips.return_value = trips_data
+        mock_service.get_robot_events.return_value = events_data
+        mock_service.get_robot_telemetry.return_value = telemetry_data
+        mock_service.check_data_availability.return_value = True
+        # Patch at all import sites so every endpoint uses the mock
+        with patch("app.endpoints.events.bigquery_service", mock_service), \
+             patch("app.endpoints.telemetry.bigquery_service", mock_service), \
+             patch("app.endpoints.trips.bigquery_module.bigquery_service", mock_service):
+            yield {
+                "service": mock_service,
+                "job_ids": job_ids,
+                "trips_data": trips_data,
+                "events_data": events_data,
+            }

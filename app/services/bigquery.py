@@ -308,7 +308,8 @@ class BigQueryService:
             latitude,
             longitude,
             event_data,
-            created_at
+            created_at,
+            job_id
         FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_EVENTS}`
         WHERE 1=1
         """
@@ -370,7 +371,8 @@ class BigQueryService:
             start_longitude,
             end_latitude,
             end_longitude,
-            status
+            status,
+            job_id
         FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
         WHERE 1=1
         """
