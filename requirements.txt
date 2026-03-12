@@ -23,7 +23,10 @@ asyncio-redis==0.16.0
 
 # Data processing
 pandas>=2.1.4
-numpy>=1.24.4,<2
+numpy>=1.24.4
+
+# Data quality validation
+great_expectations>=1.0.0
 
 # Logging and monitoring
 structlog==23.2.0

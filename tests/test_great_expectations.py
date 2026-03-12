@@ -11,16 +11,13 @@ This serves as both:
 """
 
 import pytest
-import json
 import re
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 
 import great_expectations as gx
 import pandas as pd
 
 from app.services.transformers import data_transformer
-from app.config import settings
 
 
 # ---------------------------------------------------------------------------

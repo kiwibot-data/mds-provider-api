@@ -6,13 +6,11 @@ Runs as a background check on each API response or as a scheduled health check.
 """
 
 import logging
-import asyncio
-from typing import Dict, List, Optional, Any, Tuple
+from collections import deque
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -77,24 +75,31 @@ class DataQualityMonitor:
     """
     Monitors MDS data quality by cross-checking trips, events, and telemetry.
 
-    Key invariants checked:
+    Operates on raw BigQuery data. Key invariants checked:
       1. trip_end count == trip count (per hour)
       2. trip_start count == trip count (per hour)
       3. No duplicate trip_ids in /trips
-      4. telemetry trip_ids ⊆ trips trip_ids
-      5. event trip_ids ⊆ trips trip_ids
-      6. All trip_ids, device_ids, event_ids are valid UUIDs
+      4. Event job_ids ⊆ trip job_ids (events reference known trips)
+      5. Telemetry job_ids ⊆ trip job_ids (telemetry references known trips)
+      6. Required ID fields (trip_id, event_id, job_id) are present and non-empty
       7. GPS coordinates in valid ranges
+      8. Timestamps within reasonable bounds
+
+    Note: UUID format validation of the final MDS output is handled by the
+    Great Expectations test suite (tests/test_great_expectations.py), which
+    operates on the API-layer transformed data where IDs are deterministic UUIDs.
     """
 
     # Alert if trip_end count deviates from trip count by more than this %
     TRIP_END_DEVIATION_THRESHOLD_PCT = 5.0
     # Alert if duplicate trip_ids exceed this count
     DUPLICATE_THRESHOLD = 0
+    # Maximum alert history entries to retain (prevents unbounded memory growth)
+    MAX_ALERT_HISTORY = 500
 
     def __init__(self):
         self._last_report: Optional[DataQualityReport] = None
-        self._alert_history: List[DataQualityAlert] = []
+        self._alert_history: deque[DataQualityAlert] = deque(maxlen=self.MAX_ALERT_HISTORY)
 
     @property
     def last_report(self) -> Optional[DataQualityReport]:
@@ -130,17 +135,20 @@ class DataQualityMonitor:
         # Check 3: trip_start count matches trip count
         self._check_trip_start_parity(trips_data, events_data, report)
 
-        # Check 4: event trip_ids are subset of trips trip_ids
-        self._check_event_trip_ids_linkage(trips_data, events_data, report)
+        # Check 4: event job_ids are subset of trip job_ids
+        self._check_event_job_id_linkage(trips_data, events_data, report)
 
-        # Check 5: telemetry trip_ids are subset of trips trip_ids
+        # Check 5: telemetry job_ids are subset of trip job_ids
         if telemetry_data:
-            self._check_telemetry_trip_ids_linkage(trips_data, telemetry_data, report)
+            self._check_telemetry_job_id_linkage(trips_data, telemetry_data, report)
 
-        # Check 6: GPS coordinates in valid range
+        # Check 6: Required ID fields are present and non-empty
+        self._check_required_id_fields(trips_data, events_data, report)
+
+        # Check 7: GPS coordinates in valid range
         self._check_gps_coordinates(trips_data, events_data, report)
 
-        # Check 7: All timestamps are reasonable
+        # Check 8: All timestamps are reasonable
         self._check_timestamps(trips_data, events_data, report)
 
         self._last_report = report
@@ -262,10 +270,10 @@ class DataQualityMonitor:
         else:
             report.checks_passed += 1
 
-    def _check_event_trip_ids_linkage(
+    def _check_event_job_id_linkage(
         self, trips: List[Dict], events: List[Dict], report: DataQualityReport
     ) -> None:
-        """Check that trip_ids referenced in events exist in trips."""
+        """Check that job_ids referenced in trip events exist in the trips dataset."""
         report.checks_run += 1
 
         trip_job_ids = {t.get("job_id", "") for t in trips}
@@ -281,7 +289,7 @@ class DataQualityMonitor:
         if unlinked:
             report.checks_failed += 1
             report.alerts.append(DataQualityAlert(
-                check_name="event_trip_id_linkage",
+                check_name="event_job_id_linkage",
                 severity=AlertSeverity.WARNING,
                 message=f"{len(unlinked)} event(s) reference job_ids not found in trips",
                 details={"unlinked_job_ids": unlinked[:10]},
@@ -289,10 +297,10 @@ class DataQualityMonitor:
         else:
             report.checks_passed += 1
 
-    def _check_telemetry_trip_ids_linkage(
+    def _check_telemetry_job_id_linkage(
         self, trips: List[Dict], telemetry: List[Dict], report: DataQualityReport
     ) -> None:
-        """Check that telemetry trip_ids are a subset of trips trip_ids."""
+        """Check that telemetry job_ids are a subset of trip job_ids."""
         report.checks_run += 1
 
         trip_job_ids = {t.get("job_id", "") for t in trips}
@@ -302,10 +310,41 @@ class DataQualityMonitor:
         if orphaned:
             report.checks_failed += 1
             report.alerts.append(DataQualityAlert(
-                check_name="telemetry_trip_id_linkage",
+                check_name="telemetry_job_id_linkage",
                 severity=AlertSeverity.WARNING,
                 message=f"{len(orphaned)} telemetry job_id(s) not found in trips",
                 details={"orphaned_job_ids": list(orphaned)[:10]},
+            ))
+        else:
+            report.checks_passed += 1
+
+    def _check_required_id_fields(
+        self, trips: List[Dict], events: List[Dict], report: DataQualityReport
+    ) -> None:
+        """Check that required ID fields (trip_id, event_id, job_id) are present and non-empty."""
+        report.checks_run += 1
+
+        missing = []
+        for i, trip in enumerate(trips):
+            if not trip.get("trip_id"):
+                missing.append(f"trip[{i}].trip_id")
+            if not trip.get("job_id"):
+                missing.append(f"trip[{i}].job_id")
+
+        for i, event in enumerate(events):
+            if not event.get("event_id"):
+                missing.append(f"event[{i}].event_id")
+            if event.get("event_type") in ("trip_start", "trip_end"):
+                if not event.get("job_id"):
+                    missing.append(f"event[{i}].job_id")
+
+        if missing:
+            report.checks_failed += 1
+            report.alerts.append(DataQualityAlert(
+                check_name="required_id_fields",
+                severity=AlertSeverity.CRITICAL,
+                message=f"{len(missing)} record(s) missing required ID field(s)",
+                details={"missing_fields": missing[:10]},
             ))
         else:
             report.checks_passed += 1
@@ -383,10 +422,9 @@ class DataQualityMonitor:
 
     def get_health_summary(self) -> Dict[str, Any]:
         """Get a summary of the monitoring state for the /health endpoint."""
-        recent_alerts = [
-            a.to_dict()
-            for a in self._alert_history[-20:]  # Last 20 alerts
-        ]
+        # Slice the last 20 from the bounded deque
+        history_list = list(self._alert_history)
+        recent_alerts = [a.to_dict() for a in history_list[-20:]]
         return {
             "data_quality": {
                 "last_check": self._last_report.to_dict() if self._last_report else None,

@@ -304,7 +304,7 @@ class BigQueryService:
         if limit:
             query += f" LIMIT {limit}"
 
-        logger.info(f"Executing events query")
+        logger.info("Executing events query")
 
         result = await self._run_query_async(query)
         logger.info(f"Events query returned {len(result)} rows")
