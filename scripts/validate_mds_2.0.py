@@ -60,7 +60,10 @@ class MDSValidator:
         
         try:
             response = requests.get(url, headers=headers, params=params, timeout=30)
-            print(f"DEBUG: Response for {url} with params {params}: {response.text}")
+            if self.verbose:
+                # Truncate to avoid exposing sensitive/PII data in logs
+                truncated = response.text[:500] + ('...' if len(response.text) > 500 else '')
+                print(f"DEBUG: Response for {url} with params {params}: {truncated}")
             raw_response = response.text
             status_code = response.status_code
             data = None
@@ -530,26 +533,11 @@ class MDSValidator:
                 if not isinstance(trip['distance'], int) or trip['distance'] < 0:
                     errors.append(f"{prefix}.distance: Must be integer >= 0")
 
-            # Validate locations (GeoJSON Features)
+            # Validate locations (MDS 2.0 GPS objects with lat/lng)
             for loc_field in ['start_location', 'end_location']:
                 if loc_field in trip:
-                    location = trip[loc_field]
-                    if not isinstance(location, dict):
-                        errors.append(f"{prefix}.{loc_field}: Must be object")
-                    elif 'geometry' not in location:
-                        errors.append(f"{prefix}.{loc_field}: Missing 'geometry' field")
-                    elif 'coordinates' not in location.get('geometry', {}):
-                        errors.append(f"{prefix}.{loc_field}.geometry: Missing 'coordinates'")
-                    else:
-                        coords = location['geometry']['coordinates']
-                        if not isinstance(coords, list) or len(coords) != 2:
-                            errors.append(f"{prefix}.{loc_field}: Invalid coordinates format")
-                        else:
-                            lng, lat = coords
-                            if not (-180 <= lng <= 180):
-                                errors.append(f"{prefix}.{loc_field}: Longitude out of range")
-                            if not (-90 <= lat <= 90):
-                                errors.append(f"{prefix}.{loc_field}: Latitude out of range")
+                    if not self._validate_gps(trip[loc_field], f"{prefix}.{loc_field}"):
+                        errors.append(f"{prefix}.{loc_field}: Invalid GPS location object")
 
             # Warn about attributes if ignore_attributes is True
             if self.ignore_attributes:
@@ -590,9 +578,9 @@ class MDSValidator:
             last_updated_val = data['last_updated']
             # MDS spec says POSIX time (seconds), not milliseconds
             if not isinstance(last_updated_val, int):
-                 errors.append(f"last_updated: Expected integer, got {type(last_updated_val).__name__}")
-            elif last_updated_val < 1514764800: # Jan 1, 2018 in seconds
-                 errors.append(f"last_updated: Timestamp {last_updated_val} is before minimum (Jan 1, 2018)")
+                errors.append(f"last_updated: Expected integer, got {type(last_updated_val).__name__}")
+            elif last_updated_val < 1514764800:  # Jan 1, 2018 in seconds
+                errors.append(f"last_updated: Timestamp {last_updated_val} is before minimum (Jan 1, 2018)")
 
         # Validate ttl
         if 'ttl' in data:
@@ -860,6 +848,12 @@ Config file format (JSON):
         action='store_true',
         default=True,
         help='Ignore validation failures in *_attributes fields (default: True)'
+    )
+    parser.add_argument(
+        '--no-ignore-attributes',
+        dest='ignore_attributes',
+        action='store_false',
+        help='Validate *_attributes fields (disables --ignore-attributes)'
     )
     parser.add_argument(
         '--verbose',

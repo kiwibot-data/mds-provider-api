@@ -3,9 +3,19 @@
 Extract complete validation schemas from MDS 2.0 VALIDATOR.json
 """
 
+import argparse
 import json
+import os
 import re
 from typing import Dict, Any, List
+
+# Default paths (relative to project root)
+DEFAULT_VALIDATOR_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'MDS 2.0 VALIDATOR.json'
+)
+DEFAULT_OUTPUT_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'MDS_VALIDATION_REQUIREMENTS.md'
+)
 
 def extract_schema_from_test(test_script: Dict) -> Dict:
     """Extract schema from test script."""
@@ -144,8 +154,26 @@ def analyze_definition(name: str, definition: Dict, indent: int = 0) -> List[str
     return lines
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Extract validation schemas from MDS 2.0 VALIDATOR.json"
+    )
+    parser.add_argument(
+        '--input', '-i',
+        default=os.environ.get('MDS_VALIDATOR_FILE', DEFAULT_VALIDATOR_FILE),
+        help='Path to MDS 2.0 VALIDATOR.json (default: MDS 2.0 VALIDATOR.json in project root, or MDS_VALIDATOR_FILE env var)'
+    )
+    parser.add_argument(
+        '--output', '-o',
+        default=os.environ.get('MDS_SCHEMA_OUTPUT', DEFAULT_OUTPUT_FILE),
+        help='Output file path (default: MDS_VALIDATION_REQUIREMENTS.md in project root, or MDS_SCHEMA_OUTPUT env var)'
+    )
+    args = parser.parse_args()
+
+    input_file = args.input
+    output_file = args.output
+
     # Read the validation file
-    with open('/Users/jdeiloff/kiwibot/mds-provider-api/MDS 2.0 VALIDATOR.json', 'r') as f:
+    with open(input_file, 'r') as f:
         data = json.load(f)
 
     output_lines = []
@@ -322,7 +350,6 @@ def main():
         output_lines.append("")
 
     # Write output
-    output_file = '/Users/jdeiloff/kiwibot/mds-provider-api/MDS_VALIDATION_REQUIREMENTS.md'
     with open(output_file, 'w') as f:
         f.write('\n'.join(output_lines))
 

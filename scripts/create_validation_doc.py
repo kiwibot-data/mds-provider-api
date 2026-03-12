@@ -4,9 +4,19 @@ Create comprehensive validation requirements document from MDS 2.0 VALIDATOR.jso
 This script extracts all validation schemas embedded in Postman collection test scripts.
 """
 
+import argparse
 import json
+import os
 import re
 from typing import Dict, List, Any, Set
+
+# Default paths (relative to project root)
+DEFAULT_COLLECTION_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'MDS 2.0 VALIDATOR.json'
+)
+DEFAULT_OUTPUT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'MDS_VALIDATION_REQUIREMENTS.md'
+)
 
 def clean_json_string(json_str: str) -> str:
     """Clean JSON string from JavaScript artifacts."""
@@ -248,8 +258,26 @@ def document_definition(name: str, definition: Dict, definitions_map: Dict, docu
     return lines
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Create validation requirements document from MDS 2.0 VALIDATOR.json"
+    )
+    parser.add_argument(
+        '--collection', '-c',
+        default=os.environ.get('MDS_COLLECTION_FILE', DEFAULT_COLLECTION_FILE),
+        help='Path to MDS 2.0 VALIDATOR.json Postman collection (default: MDS 2.0 VALIDATOR.json in project root, or MDS_COLLECTION_FILE env var)'
+    )
+    parser.add_argument(
+        '--output', '-o',
+        default=os.environ.get('MDS_VALIDATION_OUTPUT', DEFAULT_OUTPUT_PATH),
+        help='Output file path (default: MDS_VALIDATION_REQUIREMENTS.md in project root, or MDS_VALIDATION_OUTPUT env var)'
+    )
+    args = parser.parse_args()
+
+    collection_file = args.collection
+    output_path = args.output
+
     # Read Postman collection
-    with open('/Users/jdeiloff/kiwibot/mds-provider-api/MDS 2.0 VALIDATOR.json', 'r') as f:
+    with open(collection_file, 'r') as f:
         collection = json.load(f)
 
     output_lines = []
@@ -447,7 +475,6 @@ def main():
         output_lines.append("")
 
     # Write output
-    output_path = '/Users/jdeiloff/kiwibot/mds-provider-api/MDS_VALIDATION_REQUIREMENTS.md'
     with open(output_path, 'w') as f:
         f.write('\n'.join(output_lines))
 

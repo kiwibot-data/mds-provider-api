@@ -204,18 +204,14 @@ async def get_historical_events(
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
                     # Generate trip_id matching trips/telemetry endpoints
-                    job_id = event_data.get('job_id')
-                    if job_id:
-                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
-                        trip_ids = [trip_id]
+                    trip_id = data_transformer._generate_trip_id(event_data)
+                    trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
                     # Generate trip_id matching trips/telemetry endpoints
-                    job_id = event_data.get('job_id')
-                    if job_id:
-                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
-                        trip_ids = [trip_id]
+                    trip_id = data_transformer._generate_trip_id(event_data)
+                    trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE
@@ -359,18 +355,14 @@ async def get_recent_events(
                     event_types = [EventType.TRIP_START]
                     vehicle_state = VehicleState.ON_TRIP
                     # Generate trip_id matching trips/telemetry endpoints
-                    job_id = event_data.get('job_id')
-                    if job_id:
-                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
-                        trip_ids = [trip_id]
+                    trip_id = data_transformer._generate_trip_id(event_data)
+                    trip_ids = [trip_id]
                 elif event_type_str == 'trip_end':
                     event_types = [EventType.TRIP_END]
                     vehicle_state = VehicleState.AVAILABLE
                     # Generate trip_id matching trips/telemetry endpoints
-                    job_id = event_data.get('job_id')
-                    if job_id:
-                        trip_id = data_transformer._generate_trip_id({'job_id': job_id})
-                        trip_ids = [trip_id]
+                    trip_id = data_transformer._generate_trip_id(event_data)
+                    trip_ids = [trip_id]
                 else:
                     event_types = [EventType.LOCATED]
                     vehicle_state = VehicleState.AVAILABLE

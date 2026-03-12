@@ -6,7 +6,6 @@ and MDS 2.0 compliance for the trips, events, and telemetry endpoints.
 """
 
 import re
-from unittest.mock import patch, AsyncMock
 from datetime import datetime, timedelta
 
 import pytest
