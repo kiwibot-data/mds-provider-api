@@ -6,7 +6,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from google.cloud import bigquery
-from google.cloud.exceptions import NotFound, GoogleCloudError
+from google.cloud.exceptions import GoogleCloudError
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -24,6 +24,15 @@ class BigQueryService:
         # Limit concurrent BigQuery operations to prevent resource exhaustion
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.query_timeout = 30  # seconds
+
+        # Pre-build fully-qualified table names to keep queries short
+        _proj = settings.BIGQUERY_PROJECT_ID
+        _ds = settings.BIGQUERY_DATASET_PRECOMPUTED
+        self._vehicles_table = f"`{_proj}.{_ds}.{settings.BIGQUERY_TABLE_VEHICLES}`"
+        self._trips_table = (
+            f"`{_proj}.{_ds}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`"
+        )
+        self._events_table = f"`{_proj}.{_ds}.{settings.BIGQUERY_TABLE_EVENTS}`"
 
     async def _run_query_async(self, query: str) -> List[Dict[str, Any]]:
         """Run BigQuery query asynchronously with timeout."""
@@ -46,7 +55,7 @@ class BigQueryService:
         """Execute BigQuery query synchronously with job config."""
         try:
             logger.info("Executing BigQuery query")
-            
+
             # Configure query job with timeout and resource limits
             job_config = bigquery.QueryJobConfig(
                 query_parameters=[],
@@ -54,12 +63,12 @@ class BigQueryService:
                 use_legacy_sql=False,
                 maximum_bytes_billed=100 * 1024 * 1024,  # 100MB limit
             )
-            
+
             query_job = self.client.query(query, job_config=job_config)
-            
+
             # Wait for query completion with timeout
-            results = query_job.result(timeout=25)  # Slightly less than async timeout
-            
+            results = query_job.result(timeout=25)
+
             return [dict(row) for row in results]
         except GoogleCloudError as e:
             logger.error(f"BigQuery error: {str(e)}")
@@ -98,7 +107,7 @@ class BigQueryService:
             status,
             battery_level,
             last_updated
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        FROM {self._vehicles_table}
         WHERE 1=1
         """
 
@@ -154,7 +163,7 @@ class BigQueryService:
             job_id,
             created_at,
             updated_at
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+        FROM {self._trips_table}
         WHERE 1=1
         """
 
@@ -207,7 +216,7 @@ class BigQueryService:
             status,
             battery_level,
             last_updated
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        FROM {self._vehicles_table}
         """
 
         if robot_ids:
@@ -239,10 +248,10 @@ class BigQueryService:
             t1.status,
             t1.battery_level,
             t1.last_updated
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}` AS t1
+        FROM {self._vehicles_table} AS t1
         INNER JOIN (
             SELECT robot_id, MAX(last_updated) as max_last_updated
-            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+            FROM {self._vehicles_table}
             WHERE last_updated >= '{cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}'
             GROUP BY robot_id
         ) AS t2 ON t1.robot_id = t2.robot_id AND t1.last_updated = t2.max_last_updated
@@ -284,7 +293,7 @@ class BigQueryService:
             event_data,
             created_at,
             job_id
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_EVENTS}`
+        FROM {self._events_table}
         WHERE 1=1
         """
 
@@ -338,7 +347,7 @@ class BigQueryService:
             end_longitude,
             status,
             job_id
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+        FROM {self._trips_table}
         WHERE 1=1
         """
 
@@ -372,7 +381,7 @@ class BigQueryService:
             # Check if we have any trip data for this hour in the pre-computed table
             query = f"""
             SELECT COUNT(*) as count
-            FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_TRIPS_PROCESSED}`
+            FROM {self._trips_table}
             WHERE trip_end >= '{start_time.isoformat()}'
             AND trip_end < '{end_time.isoformat()}'
             LIMIT 1
@@ -404,6 +413,7 @@ async def get_robot_by_id(robot_id: str) -> Optional[Dict[str, Any]]:
     Get a single robot by its ID.
     """
     # This should return the latest status record for the given robot_id
+    vehicles = bigquery_service._vehicles_table
     query = f"""
     SELECT
         t1.robot_id,
@@ -414,13 +424,14 @@ async def get_robot_by_id(robot_id: str) -> Optional[Dict[str, Any]]:
         t1.status,
         t1.battery_level,
         t1.last_updated
-    FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}` AS t1
+    FROM {vehicles} AS t1
     INNER JOIN (
         SELECT robot_id, MAX(last_updated) as max_last_updated
-        FROM `{settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_PRECOMPUTED}.{settings.BIGQUERY_TABLE_VEHICLES}`
+        FROM {vehicles}
         WHERE robot_id = '{robot_id}'
         GROUP BY robot_id
-    ) AS t2 ON t1.robot_id = t2.robot_id AND t1.last_updated = t2.max_last_updated
+    ) AS t2 ON t1.robot_id = t2.robot_id
+        AND t1.last_updated = t2.max_last_updated
     WHERE t1.robot_id = '{robot_id}'
     LIMIT 1
     """

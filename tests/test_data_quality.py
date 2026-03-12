@@ -8,8 +8,6 @@ and MDS 2.0 compliance for the trips, events, and telemetry endpoints.
 import re
 from datetime import datetime, timedelta
 
-import pytest
-
 from app.config import MDSConstants
 
 UUID_PATTERN = re.compile(
