@@ -34,13 +34,12 @@ class BigQueryService:
         )
         self._events_table = f"`{_proj}.{_ds}.{settings.BIGQUERY_TABLE_EVENTS}`"
 
-    async def _run_query_async(self, query: str) -> List[Dict[str, Any]]:
+    async def _run_query_async(self, query: str, max_bytes: Optional[int] = None) -> List[Dict[str, Any]]:
         """Run BigQuery query asynchronously with timeout."""
         loop = asyncio.get_event_loop()
         try:
-            # Add timeout to prevent hanging queries during high load
             result = await asyncio.wait_for(
-                loop.run_in_executor(self.executor, self._execute_query, query),
+                loop.run_in_executor(self.executor, self._execute_query, query, max_bytes),
                 timeout=self.query_timeout
             )
             return result
@@ -51,17 +50,16 @@ class BigQueryService:
             logger.error(f"BigQuery query failed: {str(e)}")
             raise
 
-    def _execute_query(self, query: str) -> List[Dict[str, Any]]:
+    def _execute_query(self, query: str, max_bytes: Optional[int] = None) -> List[Dict[str, Any]]:
         """Execute BigQuery query synchronously with job config."""
         try:
             logger.info("Executing BigQuery query")
 
-            # Configure query job with timeout and resource limits
             job_config = bigquery.QueryJobConfig(
                 query_parameters=[],
                 use_query_cache=True,
                 use_legacy_sql=False,
-                maximum_bytes_billed=100 * 1024 * 1024,  # 100MB limit
+                maximum_bytes_billed=max_bytes or (100 * 1024 * 1024),
             )
 
             query_job = self.client.query(query, job_config=job_config)
@@ -324,45 +322,54 @@ class BigQueryService:
         telemetry_time: str
     ) -> List[Dict[str, Any]]:
         """
-        Fetch robot telemetry data from pre-computed BigQuery table.
-        The precomputed table already contains only the relevant robots
-        (top 25 most active), so no default robot filter is needed.
+        Fetch all GPS telemetry points for the requested hour from the raw
+        robot_location table.  This includes points recorded while vehicles
+        are on trips *and* while idling, giving consumers a complete GPS
+        breadcrumb trail instead of only trip start/end coordinates.
 
         Args:
             telemetry_time: Hour in format YYYY-MM-DDTHH for MDS compliance
 
         Returns:
-            List of telemetry records (using trip start/end points as minimum viable telemetry)
+            List of telemetry records with individual GPS readings
         """
-        # Build query for pre-computed trips table (using start/end points as telemetry)
-        query = f"""
-        SELECT
-            robot_id,
-            trip_id,
-            trip_start,
-            trip_end,
-            start_latitude,
-            start_longitude,
-            end_latitude,
-            end_longitude,
-            status,
-            job_id
-        FROM {self._trips_table}
-        WHERE 1=1
-        """
-
-        # Add time filter for the specified hour
         try:
             start_time = datetime.strptime(telemetry_time, "%Y-%m-%dT%H")
             end_time = start_time + timedelta(hours=1)
-            query += f" AND trip_end >= '{start_time.isoformat()}'"
-            query += f" AND trip_end < '{end_time.isoformat()}'"
         except ValueError:
             raise ValueError(f"Invalid telemetry_time format. Expected YYYY-MM-DDTHH, got: {telemetry_time}")
 
-        query += " ORDER BY trip_start ASC"
+        _proj = settings.BIGQUERY_PROJECT_ID
+        _ds_loc = settings.BIGQUERY_DATASET_LOCATIONS
+        _tbl_loc = settings.BIGQUERY_TABLE_LOCATIONS
+        locations_table = f"`{_proj}.{_ds_loc}.{_tbl_loc}`"
 
-        return await self._run_query_async(query)
+        # Build date partition filter (table is partitioned on `date` column)
+        dates = [start_time.strftime('%Y-%m-%d')]
+        if end_time.date() != start_time.date():
+            dates.append(end_time.strftime('%Y-%m-%d'))
+        date_filter = ", ".join(f"'{d}'" for d in dates)
+
+        query = f"""
+        SELECT
+            loc.robot_id,
+            loc.latitude,
+            loc.longitude,
+            loc.timestamp,
+            loc.accuracy,
+            t.job_id
+        FROM {locations_table} AS loc
+        LEFT JOIN {self._trips_table} AS t
+            ON loc.robot_id = t.robot_id
+            AND loc.timestamp >= t.trip_start
+            AND loc.timestamp <= t.trip_end
+        WHERE loc.date IN ({date_filter})
+          AND loc.timestamp >= '{start_time.isoformat()}'
+          AND loc.timestamp < '{end_time.isoformat()}'
+        ORDER BY loc.robot_id, loc.timestamp ASC
+        """
+
+        return await self._run_query_async(query, max_bytes=5 * 1024 * 1024 * 1024)
 
     async def check_data_availability(self, hour: str) -> bool:
         """

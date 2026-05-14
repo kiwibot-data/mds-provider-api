@@ -122,78 +122,52 @@ async def get_telemetry(
         telemetry_points = []
         from uuid import uuid5, NAMESPACE_DNS
 
-        for telemetry_record in telemetry_data:
+        for record in telemetry_data:
             try:
-                robot_id = telemetry_record.get('robot_id')
+                robot_id = record.get('robot_id')
                 if not robot_id:
                     continue
 
                 device_id = data_transformer.robot_id_to_device_id(robot_id)
 
-                # Parse timestamps - use trip_start for start point, trip_end for end point
-                start_time = telemetry_record.get('trip_start')
-                end_time = telemetry_record.get('trip_end')
-
-                if isinstance(start_time, datetime):
-                    start_time_ms = int(start_time.timestamp() * 1000)
+                ts = record.get('timestamp')
+                if isinstance(ts, datetime):
+                    ts_ms = int(ts.timestamp() * 1000)
                 else:
-                    start_time_ms = int(start_time * 1000) if start_time else 0
+                    ts_ms = int(ts * 1000) if ts else 0
+                if ts_ms <= 0:
+                    continue
 
-                if isinstance(end_time, datetime):
-                    end_time_ms = int(end_time.timestamp() * 1000)
-                else:
-                    end_time_ms = int(end_time * 1000) if end_time else 0
+                lat = record.get('latitude')
+                lng = record.get('longitude')
+                if lat is None or lng is None:
+                    continue
 
-                # Extract or generate trip_id and journey_id
-                job_id = telemetry_record.get('job_id') or telemetry_record.get('id') or robot_id
-                trip_id = data_transformer._generate_trip_id({'job_id': job_id})
-                journey_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.journey.{job_id}")
+                gps = GPS(
+                    lat=round_gps_coordinate(lat),
+                    lng=round_gps_coordinate(lng),
+                    horizontal_accuracy=record.get('accuracy', 5.0)
+                )
 
-                # Create start point telemetry
-                start_lat = telemetry_record.get('start_latitude')
-                start_lng = telemetry_record.get('start_longitude')
-                if start_lat is not None and start_lng is not None and start_time_ms > 0:
-                    start_gps = GPS(
-                        lat=round_gps_coordinate(start_lat),
-                        lng=round_gps_coordinate(start_lng),
-                        horizontal_accuracy=5.0  # Default GPS accuracy in meters
-                    )
-                    # Generate unique telemetry_id for this point
-                    start_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{device_id}.{start_time_ms}")
+                telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{device_id}.{ts_ms}")
 
-                    start_telemetry = Telemetry(
-                        provider_id=settings.PROVIDER_ID_UUID,
-                        device_id=device_id,
-                        telemetry_id=start_telemetry_id,
-                        timestamp=start_time_ms,
-                        trip_ids=[trip_id],
-                        journey_id=journey_id,
-                        location=start_gps
-                    )
-                    telemetry_points.append(start_telemetry)
+                job_id = record.get('job_id')
+                trip_ids = []
+                journey_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.journey.{robot_id}")
+                if job_id:
+                    trip_ids = [data_transformer._generate_trip_id({'job_id': job_id})]
+                    journey_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.journey.{job_id}")
 
-                # Create end point telemetry
-                end_lat = telemetry_record.get('end_latitude')
-                end_lng = telemetry_record.get('end_longitude')
-                if end_lat is not None and end_lng is not None and end_time_ms > 0:
-                    end_gps = GPS(
-                        lat=round_gps_coordinate(end_lat),
-                        lng=round_gps_coordinate(end_lng),
-                        horizontal_accuracy=5.0  # Default GPS accuracy in meters
-                    )
-                    # Generate unique telemetry_id for this point
-                    end_telemetry_id = uuid5(NAMESPACE_DNS, f"{settings.PROVIDER_ID}.telemetry.{device_id}.{end_time_ms}")
-
-                    end_telemetry = Telemetry(
-                        provider_id=settings.PROVIDER_ID_UUID,
-                        device_id=device_id,
-                        telemetry_id=end_telemetry_id,
-                        timestamp=end_time_ms,
-                        trip_ids=[trip_id],
-                        journey_id=journey_id,
-                        location=end_gps
-                    )
-                    telemetry_points.append(end_telemetry)
+                point = Telemetry(
+                    provider_id=settings.PROVIDER_ID_UUID,
+                    device_id=device_id,
+                    telemetry_id=telemetry_id,
+                    timestamp=ts_ms,
+                    trip_ids=trip_ids if trip_ids else None,
+                    journey_id=journey_id,
+                    location=gps
+                )
+                telemetry_points.append(point)
 
             except Exception as e:
                 logger.error(f"Failed to transform telemetry data: {str(e)}")

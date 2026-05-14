@@ -53,13 +53,9 @@ async def get_vehicles(
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 3600,
         "vehicles": vehicles,
-        "links": [
-            {
-                "links": {
-                    "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
-                }
-            }
-        ]
+        "links": {
+            "next": None
+        }
     }
     logger.info(f"Response for /vehicles: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))
@@ -94,7 +90,7 @@ async def get_all_vehicle_statuses(
         "ttl": 60,
         "vehicles_status": vehicles_status_data,
         "links": {
-            "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+            "next": None
         }
     }
     logger.info(f"Response for /vehicles/status: {response_payload}")
@@ -128,13 +124,9 @@ async def get_vehicle_by_id(
         "last_updated": int(datetime.now(timezone.utc).timestamp() * 1000),
         "ttl": 3600,
         "vehicles": [vehicle_data],
-        "links": [
-            {
-                "links": {
-                    "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
-                }
-            }
-        ]
+        "links": {
+            "next": None
+        }
     }
     logger.info(f"Response for /vehicles/{vehicle_id}: {response_payload}")
     return JSONResponse(content=jsonable_encoder(response_payload))
@@ -168,7 +160,7 @@ async def get_vehicle_status_by_id(
         "ttl": 60,
         "vehicles_status": [vehicle_status_data],
         "links": {
-            "next": str(request.url)  # Required by MDS 2.0, same URL indicates no more pages
+            "next": None
         }
     }
     logger.info(f"Response for /vehicles/{vehicle_id}/status: {response_payload}")

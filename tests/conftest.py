@@ -249,7 +249,57 @@ def mock_cross_endpoint_service():
         },
     ]
 
-    telemetry_data = trips_data  # Telemetry endpoint queries trips_processed
+    telemetry_data = [
+        {
+            "robot_id": "4F403",
+            "latitude": 38.9197, "longitude": -77.0218,
+            "timestamp": base_time,
+            "accuracy": 5.0,
+            "job_id": job_ids[0],
+        },
+        {
+            "robot_id": "4F403",
+            "latitude": 38.9220, "longitude": -77.0250,
+            "timestamp": base_time + timedelta(minutes=15),
+            "accuracy": 5.0,
+            "job_id": job_ids[0],
+        },
+        {
+            "robot_id": "4F403",
+            "latitude": 38.9250, "longitude": -77.0300,
+            "timestamp": base_time + timedelta(minutes=30),
+            "accuracy": 5.0,
+            "job_id": job_ids[0],
+        },
+        {
+            "robot_id": "4E006",
+            "latitude": 38.9100, "longitude": -77.0100,
+            "timestamp": base_time + timedelta(minutes=5),
+            "accuracy": 5.0,
+            "job_id": job_ids[1],
+        },
+        {
+            "robot_id": "4E006",
+            "latitude": 38.9150, "longitude": -77.0150,
+            "timestamp": base_time + timedelta(minutes=20),
+            "accuracy": 5.0,
+            "job_id": job_ids[1],
+        },
+        {
+            "robot_id": "4E006",
+            "latitude": 38.9200, "longitude": -77.0200,
+            "timestamp": base_time + timedelta(minutes=40),
+            "accuracy": 5.0,
+            "job_id": job_ids[1],
+        },
+        {
+            "robot_id": "4F403",
+            "latitude": 38.9255, "longitude": -77.0305,
+            "timestamp": base_time + timedelta(minutes=45),
+            "accuracy": 5.0,
+            "job_id": None,
+        },
+    ]
 
     with patch("app.services.bigquery.bigquery_service", new_callable=AsyncMock) as mock_service:
         mock_service.get_robot_trips.return_value = trips_data
